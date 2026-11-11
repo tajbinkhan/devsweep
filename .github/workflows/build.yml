@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Run tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Build installer and exe
+        run: npm run build
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $out = "src-tauri/target/release"
+          $files = @("$out/devsweep.exe")
+          if (Test-Path "$out/WebView2Loader.dll") { $files += "$out/WebView2Loader.dll" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path $files -DestinationPath dist/DevSweep-portable.zip -Force
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DevSweep-windows
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: DevSweep-windows
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

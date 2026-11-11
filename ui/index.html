@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DevSweep</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" fill="var(--logo-bg)" />
+        <rect x="7" y="8" width="18" height="4" rx="2" fill="var(--logo-dim)" />
+        <rect x="7" y="14" width="12.5" height="4" rx="2" fill="var(--logo-fg)" />
+        <rect x="7" y="20" width="7" height="4" rx="2" fill="var(--accent)" />
+      </svg>
+      <div>
+        <h1>DevSweep <span class="admin-badge" id="admin-badge" hidden>Administrator</span></h1>
+        <p class="tagline">Removes build output and package caches that your tools can rebuild</p>
+      </div>
+    </div>
+    <div class="drives" id="drives" aria-label="Drives"></div>
+  </header>
+
+  <section class="where" aria-labelledby="where-title">
+    <div class="where-head">
+      <h2 id="where-title">Where to look</h2>
+      <label class="switch">
+        <input type="checkbox" id="include-caches" checked />
+        <span class="track" aria-hidden="true"></span>
+        Include global package caches
+      </label>
+    </div>
+    <div class="where-row">
+      <div class="roots" id="roots"></div>
+      <button class="btn ghost" id="add-root" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
+        Add folder
+      </button>
+      <div class="spacer"></div>
+      <button class="btn primary" id="scan" type="button">Scan</button>
+    </div>
+    <div class="progress" id="progress" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text">
+        <span id="progress-label">Starting</span>
+        <span class="progress-path" id="progress-path"></span>
+      </div>
+      <button class="btn ghost small" id="cancel" type="button">Cancel</button>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+  </section>
+
+  <main class="results" id="results">
+    <div class="empty" id="empty">
+      <h2>Nothing scanned yet</h2>
+      <p>DevSweep looks for folders that a build tool or package manager recreates on its own, such as
+        <code>node_modules</code>, <code>.next</code> and Rust <code>target</code>, and for package caches such as the npm and Cargo caches.</p>
+      <ul class="rules">
+        <li>A folder only counts when its project file sits next to it, for example <code>node_modules</code> next to <code>package.json</code>.</li>
+        <li>Program Files, AppData, editor extensions, game libraries and <code>.git</code> are never scanned, so installed programs are not touched.</li>
+        <li>Folders used by a running dev server, build or program are locked and cannot be selected.</li>
+        <li>Everything is checked again right before it is deleted.</li>
+      </ul>
+    </div>
+
+    <div class="table-wrap" id="table-wrap" hidden>
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button role="tab" class="tab" data-tab="project" aria-selected="true">Project folders <span class="count" id="count-project"></span></button>
+          <button role="tab" class="tab" data-tab="cache" aria-selected="false">Global caches <span class="count" id="count-cache"></span></button>
+        </div>
+        <div class="spacer"></div>
+        <label class="search">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
+          <input type="search" id="query" placeholder="Filter by path or type" />
+        </label>
+        <div class="select-unused">
+          <button class="btn ghost small" id="select-unused" type="button">Select unused for</button>
+          <select id="unused-days" aria-label="Days unused">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+            <option value="0">any age</option>
+          </select>
+        </div>
+        <button class="btn ghost small" id="select-none" type="button">Clear selection</button>
+      </div>
+
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="check-all" aria-label="Select all shown" /></th>
+            <th class="col-size sortable" data-sort="bytes">Size</th>
+            <th class="col-folder sortable" data-sort="path">Folder</th>
+            <th class="col-eco sortable" data-sort="ecosystem">Type</th>
+            <th class="col-age sortable" data-sort="lastWrite">Last changed</th>
+            <th class="col-safety">How it comes back</th>
+            <th class="col-act"><span class="sr">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p class="table-empty" id="table-empty" hidden>No folders match.</p>
+    </div>
+  </main>
+
+  <footer class="footer" id="footer" hidden>
+    <div class="sel-summary"><strong id="sel-count">0</strong> selected, <strong id="sel-size">0 B</strong></div>
+    <div class="spacer"></div>
+    <button class="btn danger" id="clean" type="button" disabled>Delete selected</button>
+  </footer>
+
+  <dialog class="modal" id="confirm">
+    <form method="dialog">
+      <h2 id="confirm-title">Delete folders</h2>
+      <p class="modal-lead" id="confirm-lead"></p>
+      <ul class="restore-list" id="confirm-list"></ul>
+      <p class="warn" id="confirm-caution" hidden></p>
+      <p class="fine">Files are deleted permanently. They do not go to the Recycle Bin.</p>
+      <div class="modal-actions">
+        <button class="btn ghost" value="cancel" type="submit">Cancel</button>
+        <button class="btn danger" value="ok" type="submit" id="confirm-ok">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="working">
+    <h2>Deleting</h2>
+    <div class="progress-bar"><div class="progress-fill" id="clean-fill"></div></div>
+    <p class="progress-path" id="clean-path"></p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="clean-cancel" type="button">Stop after current folder</button>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="report">
+    <form method="dialog">
+      <h2 id="report-title">Done</h2>
+      <p class="modal-lead" id="report-lead"></p>
+      <ul class="fail-list" id="report-fails"></ul>
+      <p class="admin-note" id="admin-note" hidden></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="restart-admin" type="button" hidden>Restart as administrator</button>
+        <button class="btn primary" value="ok" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="main.js"></script>
+</body>
+</html>

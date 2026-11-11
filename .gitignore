@@ -1,0 +1,10 @@
+node_modules/
+src-tauri/target/
+src-tauri/gen/schemas/
+assets/shots/
+release/
+.impeccable/
+
+# Local one-off cleanup scripts, not part of the app
+clean_build_folders.py
+clean-build-folders.ps1

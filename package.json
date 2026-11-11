@@ -1,0 +1,14 @@
+{
+  "name": "devsweep",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Desktop app that finds and removes rebuildable developer files: build output, dependency folders and package caches.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}
