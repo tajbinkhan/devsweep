@@ -382,6 +382,15 @@ const NEVER_ENTER: &[&str] = &[
     ".cursor",
     ".windsurf",
     ".idea",
+    // Linux per-user program data. ~/.config and ~/.cache hold editor extensions and app
+    // bundles with their own node_modules; ~/.var holds Flatpak apps; ~/snap holds snaps.
+    ".config",
+    ".cache",
+    ".var",
+    "snap",
+    ".steam",
+    ".wine",
+    "lost+found",
     // Toolchains and global caches
     ".rustup",
     ".cargo",
@@ -400,6 +409,16 @@ const NEVER_ENTER: &[&str] = &[
     ".nvm",
     "nvm",
     ".pyenv",
+    // Version managers and global npm prefixes. Globally installed CLI tools sit there as
+    // package.json plus node_modules and would otherwise look like projects.
+    ".volta",
+    ".fnm",
+    ".asdf",
+    ".nodenv",
+    ".rbenv",
+    ".sdkman",
+    ".npm-global",
+    ".npm-packages",
 ];
 
 pub fn is_never_enter(name: &str) -> bool {
@@ -413,6 +432,17 @@ pub fn never_enter_paths() -> Vec<PathBuf> {
         out.push(home.join("go"));
         out.push(home.join(".local"));
         out.push(home.join("Library")); // macOS application data
+    }
+    // Linux system folders, for when a whole drive such as / is scanned. Global npm packages
+    // live in /usr/lib/node_modules and look like projects.
+    if cfg!(unix) {
+        for dir in [
+            "/bin", "/boot", "/dev", "/efi", "/etc", "/lib", "/lib32", "/lib64", "/libx32",
+            "/nix", "/gnu", "/opt", "/proc", "/root", "/run", "/sbin", "/snap", "/srv", "/sys",
+            "/usr", "/var", "/tmp",
+        ] {
+            out.push(PathBuf::from(dir));
+        }
     }
     out
 }
@@ -466,56 +496,71 @@ pub struct CacheEntry {
 
 pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let home = dirs::home_dir().unwrap_or_default();
+    // Windows keeps most caches in %LOCALAPPDATA%. Linux splits them between ~/.cache
+    // (XDG_CACHE_HOME) and ~/.local/share (XDG_DATA_HOME), and some tools use a dot folder.
     let local = dirs::data_local_dir().unwrap_or_else(|| home.join("AppData").join("Local"));
+    let cache = dirs::cache_dir().unwrap_or_else(|| local.clone());
+    let win = cfg!(windows);
+    let pick = |windows: PathBuf, other: PathBuf| if win { windows } else { other };
+
     let cargo_home = std::env::var_os("CARGO_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".cargo"));
     let go_cache = std::env::var_os("GOCACHE")
         .map(PathBuf::from)
-        .unwrap_or_else(|| local.join("go-build"));
+        .unwrap_or_else(|| cache.join("go-build"));
     let go_mod = std::env::var_os("GOMODCACHE")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join("go").join("pkg").join("mod"));
 
     use CacheAction::*;
     use Safety::*;
+    let pnpm_note = Some("Uses pnpm store prune. Freed space is often less than the store size.");
     let mut list: Vec<(&str, &str, PathBuf, Safety, &str, Option<&str>, CacheAction)> = vec![
-        ("npm cache", "Node.js", local.join("npm-cache"), Safe, "Downloaded again by npm when needed", None, RemoveContents),
-        ("Yarn cache", "Node.js", local.join("Yarn").join("Cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents),
+        ("npm cache", "Node.js", pick(local.join("npm-cache"), home.join(".npm").join("_cacache")), Safe, "Downloaded again by npm when needed", None, RemoveContents),
+        ("Yarn cache", "Node.js", pick(local.join("Yarn").join("Cache"), cache.join("yarn")), Safe, "Downloaded again by yarn when needed", None, RemoveContents),
+        ("Yarn Berry cache", "Node.js", home.join(".yarn").join("berry").join("cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents),
         ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents),
-        ("node-gyp headers", "Node.js", local.join("node-gyp").join("Cache"), Safe, "Downloaded again when a native module builds", None, RemoveContents),
-        ("pnpm store", "Node.js", local.join("pnpm").join("store"), Safe, "Prunes only packages that no project uses", Some("Uses pnpm store prune. Freed space is often less than the store size."), PnpmPrune),
+        ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents),
+        ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents),
+        ("pnpm store", "Node.js", local.join("pnpm").join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune),
         ("Cargo registry sources", "Rust", cargo_home.join("registry").join("src"), Safe, "Unpacked again from the local registry cache by cargo", None, RemoveContents),
         ("Cargo registry downloads", "Rust", cargo_home.join("registry").join("cache"), Reinstall, "Downloaded again by cargo, needs network", None, RemoveContents),
         ("Cargo git checkouts", "Rust", cargo_home.join("git").join("checkouts"), Safe, "Checked out again by cargo", None, RemoveContents),
-        ("pip cache", "Python", local.join("pip").join("cache"), Safe, "Downloaded again by pip when needed", None, RemoveContents),
-        ("uv cache", "Python", local.join("uv").join("cache"), Safe, "Downloaded again by uv when needed", None, RemoveContents),
+        ("pip cache", "Python", pick(local.join("pip").join("cache"), cache.join("pip")), Safe, "Downloaded again by pip when needed", None, RemoveContents),
+        ("uv cache", "Python", pick(local.join("uv").join("cache"), cache.join("uv")), Safe, "Downloaded again by uv when needed", None, RemoveContents),
         ("Gradle caches", "Gradle", home.join(".gradle").join("caches"), Reinstall, "Downloaded again by Gradle, needs network", None, RemoveContents),
         ("Gradle wrapper downloads", "Gradle", home.join(".gradle").join("wrapper").join("dists"), Reinstall, "Downloaded again by ./gradlew", None, RemoveContents),
         ("Maven repository", "Maven", home.join(".m2").join("repository"), Reinstall, "Downloaded again by mvn, needs network", Some("Offline builds fail until dependencies are downloaded again."), RemoveContents),
         ("NuGet packages", ".NET", home.join(".nuget").join("packages"), Reinstall, "Restored by dotnet restore, needs network", None, RemoveContents),
         ("NuGet HTTP cache", ".NET", local.join("NuGet").join("v3-cache"), Safe, "Downloaded again when needed", None, RemoveContents),
+        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("http-cache"), Safe, "Downloaded again when needed", None, RemoveContents),
         ("Go build cache", "Go", go_cache, Safe, "Rebuilt by go build", None, RemoveContents),
         ("Go module cache", "Go", go_mod, Reinstall, "Downloaded again by go, needs network", None, RemoveContents),
-        ("Electron downloads", "Electron", local.join("electron").join("Cache"), Safe, "Downloaded again when needed", None, RemoveContents),
-        ("electron-builder cache", "Electron", local.join("electron-builder").join("Cache"), Safe, "Downloaded again when packaging", None, RemoveContents),
-        ("Playwright browsers", "Testing", local.join("ms-playwright"), Reinstall, "npx playwright install", Some("Playwright tests fail until browsers are installed again."), RemoveContents),
-        ("Cypress binaries", "Testing", local.join("Cypress").join("Cache"), Reinstall, "npx cypress install", None, RemoveContents),
-        ("TypeScript typings cache", "Node.js", local.join("Microsoft").join("TypeScript"), Safe, "Recreated by the editor", None, RemoveContents),
+        ("Electron downloads", "Electron", pick(local.join("electron").join("Cache"), cache.join("electron")), Safe, "Downloaded again when needed", None, RemoveContents),
+        ("electron-builder cache", "Electron", pick(local.join("electron-builder").join("Cache"), cache.join("electron-builder")), Safe, "Downloaded again when packaging", None, RemoveContents),
+        ("Playwright browsers", "Testing", pick(local.join("ms-playwright"), cache.join("ms-playwright")), Reinstall, "npx playwright install", Some("Playwright tests fail until browsers are installed again."), RemoveContents),
+        ("Cypress binaries", "Testing", pick(local.join("Cypress").join("Cache"), cache.join("Cypress")), Reinstall, "npx cypress install", None, RemoveContents),
+        ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents),
     ];
 
-    // pnpm keeps a separate store at the root of each drive that holds projects, e.g. F:\.pnpm-store
+    // pnpm keeps a separate store at the root of each drive that holds projects, e.g.
+    // F:\.pnpm-store on Windows or /mnt/data/.pnpm-store on Linux. Linux mount points can sit
+    // anywhere, so every folder above a scan root is checked; only existing ones are kept.
     for root in scan_roots {
-        if let Some(drive) = root.ancestors().last() {
-            let store = drive.join(".pnpm-store");
-            list.push(("pnpm store", "Node.js", store, Safe, "Prunes only packages that no project uses", Some("Uses pnpm store prune. Freed space is often less than the store size."), PnpmPrune));
+        let tops: Vec<&Path> = if win { root.ancestors().last().into_iter().collect() } else { root.ancestors().collect() };
+        for top in tops {
+            list.push(("pnpm store", "Node.js", top.join(".pnpm-store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune));
         }
     }
 
     let mut seen = std::collections::HashSet::new();
     list.into_iter()
         .filter(|(_, _, p, ..)| p.is_dir())
-        .filter(|(_, _, p, ..)| seen.insert(p.to_string_lossy().to_lowercase()))
+        .filter(|(_, _, p, ..)| {
+            let k = p.to_string_lossy();
+            seen.insert(if win { k.to_lowercase() } else { k.into_owned() })
+        })
         .map(|(label, ecosystem, path, safety, restore, note, action)| CacheEntry {
             id: format!("cache:{}", path.display()),
             label,

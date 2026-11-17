@@ -35,6 +35,13 @@ fn junction(link: &Path, target: &Path) {
     assert!(ok, "could not create junction");
 }
 
+/// On Linux and macOS a directory symlink plays the part of a Windows junction.
+#[cfg(unix)]
+fn junction(link: &Path, target: &Path) {
+    fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+
 fn rel(root: &Path, items: &[scan::Item]) -> Vec<String> {
     let mut v: Vec<String> = items
         .iter()
@@ -114,7 +121,6 @@ fn finds_only_folders_owned_by_a_project() {
     let _ = fs::remove_dir_all(&t);
 }
 
-#[cfg(windows)]
 #[test]
 fn deletes_without_following_junctions_and_clears_read_only() {
     let t = fixture("delete");
@@ -164,13 +170,40 @@ fn guard_refuses_dangerous_paths() {
     let _ = fs::remove_dir_all(&t);
 }
 
-#[cfg(windows)]
 #[test]
 fn guard_refuses_a_junction_itself() {
     let t = fixture("guard-junction");
     file(&t.join("real/x.txt"), 1);
     junction(&t.join("proj/node_modules"), &t.join("real"));
     assert!(clean::guard(&t.join("proj/node_modules")).is_err());
+    let _ = fs::remove_dir_all(&t);
+}
+
+#[cfg(unix)]
+#[test]
+fn guard_refuses_linux_system_folders() {
+    assert!(clean::guard(Path::new("/")).is_err());
+    assert!(clean::guard(Path::new("/home")).is_err());
+    assert!(clean::guard(Path::new("/usr/lib/node_modules")).is_err());
+    assert!(clean::guard(Path::new("/opt/app/resources")).is_err());
+    assert!(clean::guard(Path::new("/var/lib/docker")).is_err());
+    assert!(clean::guard(Path::new("/etc/x")).is_err());
+}
+
+/// The Go module cache makes every folder read-only (0555). Deleting must still work.
+#[cfg(unix)]
+#[test]
+fn removes_read_only_folders() {
+    use std::os::unix::fs::PermissionsExt;
+    let t = fixture("readonly-dirs");
+    file(&t.join("mod/github.com/x/y@v1.0.0/sub/a.go"), 10);
+    file(&t.join("mod/github.com/x/y@v1.0.0/b.go"), 10);
+    for d in ["mod/github.com/x/y@v1.0.0/sub", "mod/github.com/x/y@v1.0.0", "mod/github.com/x"] {
+        fs::set_permissions(t.join(d), fs::Permissions::from_mode(0o555)).unwrap();
+    }
+    clean::remove_contents(&t.join("mod")).unwrap();
+    assert!(t.join("mod").is_dir());
+    assert_eq!(fs::read_dir(t.join("mod")).unwrap().count(), 0);
     let _ = fs::remove_dir_all(&t);
 }
 
@@ -272,4 +305,16 @@ fn access_denied_is_reported_as_needing_admin() {
 fn ordinary_failures_do_not_ask_for_admin() {
     let failure: clean::Failure = "In use by node".into();
     assert!(!failure.denied);
+}
+
+#[test]
+fn default_roots_include_home_and_drives_have_a_system_one() {
+    let roots = crate::default_roots();
+    let home = dirs::home_dir().unwrap().display().to_string();
+    assert!(roots.contains(&home), "{roots:?}");
+    let drives = crate::drives();
+    eprintln!("drives: {:?}", drives.iter().map(|d| (&d.mount, d.system)).collect::<Vec<_>>());
+    eprintln!("roots: {roots:?}");
+    eprintln!("caches: {:?}", rules::cache_entries(&[]).iter().map(|c| c.path.display().to_string()).collect::<Vec<_>>());
+    assert!(drives.iter().any(|d| d.system), "the drive with the home folder is marked system");
 }

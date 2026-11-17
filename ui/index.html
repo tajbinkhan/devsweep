@@ -59,7 +59,7 @@
         <code>node_modules</code>, <code>.next</code> and Rust <code>target</code>, and for package caches such as the npm and Cargo caches.</p>
       <ul class="rules">
         <li>A folder only counts when its project file sits next to it, for example <code>node_modules</code> next to <code>package.json</code>.</li>
-        <li>Program Files, AppData, editor extensions, game libraries and <code>.git</code> are never scanned, so installed programs are not touched.</li>
+        <li id="rule-skip">Program Files, AppData, editor extensions, game libraries and <code>.git</code> are never scanned, so installed programs are not touched.</li>
         <li>Folders used by a running dev server, build or program are locked and cannot be selected.</li>
         <li>Everything is checked again right before it is deleted.</li>
       </ul>
@@ -118,7 +118,7 @@
       <p class="modal-lead" id="confirm-lead"></p>
       <ul class="restore-list" id="confirm-list"></ul>
       <p class="warn" id="confirm-caution" hidden></p>
-      <p class="fine">Files are deleted permanently. They do not go to the Recycle Bin.</p>
+      <p class="fine" id="confirm-fine">Files are deleted permanently. They do not go to the Recycle Bin.</p>
       <div class="modal-actions">
         <button class="btn ghost" value="cancel" type="submit">Cancel</button>
         <button class="btn danger" value="ok" type="submit" id="confirm-ok">Delete</button>

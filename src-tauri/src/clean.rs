@@ -6,8 +6,8 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path};
 
-/// Why a delete failed. `denied` is set when Windows refused access, which running
-/// DevSweep as administrator may fix.
+/// Why a delete failed. `denied` is set when the OS refused access. On Windows running
+/// DevSweep as administrator may fix it; on Linux the files usually belong to root.
 #[derive(Debug)]
 pub struct Failure {
     pub message: String,
@@ -48,6 +48,13 @@ pub fn guard(path: &Path) -> Result<(), String> {
             return Err("Refusing to delete inside the Windows folder".into());
         }
     }
+    #[cfg(unix)]
+    if let Some(dir) = SYSTEM_DIRS
+        .iter()
+        .find(|d| path.starts_with(d) && !path.starts_with("/run/media"))
+    {
+        return Err(format!("Refusing to delete inside the system folder {dir}"));
+    }
     let md = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     if md.file_type().is_symlink() || is_reparse(&md) {
         return Err("Path is a link or junction, not a real folder".into());
@@ -58,9 +65,23 @@ pub fn guard(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Folders that belong to the operating system and installed packages on Linux. Global npm
+/// packages in /usr/lib/node_modules, for example, look exactly like a project.
+#[cfg(unix)]
+const SYSTEM_DIRS: &[&str] = &[
+    "/bin", "/boot", "/dev", "/efi", "/etc", "/lib", "/lib32", "/lib64", "/libx32", "/nix",
+    "/gnu", "/opt", "/proc", "/root", "/run", "/sbin", "/snap", "/srv", "/sys", "/usr", "/var",
+];
+
+#[cfg(windows)]
 fn same(a: &Path, b: &Path) -> bool {
     a.to_string_lossy().to_lowercase().trim_end_matches('\\')
         == b.to_string_lossy().to_lowercase().trim_end_matches('\\')
+}
+
+#[cfg(not(windows))]
+fn same(a: &Path, b: &Path) -> bool {
+    a == b // Path equality ignores a trailing slash
 }
 
 #[cfg(windows)]
@@ -75,6 +96,7 @@ fn is_reparse(_md: &fs::Metadata) -> bool {
 }
 
 /// Clears the read-only flag on every file below `dir` (git objects in packages often have it).
+#[cfg(windows)]
 fn clear_readonly(dir: &Path) {
     let Ok(rd) = fs::read_dir(dir) else { return };
     for entry in rd.flatten() {
@@ -90,6 +112,60 @@ fn clear_readonly(dir: &Path) {
             #[allow(clippy::permissions_set_readonly_false)]
             perms.set_readonly(false);
             let _ = fs::set_permissions(entry.path(), perms);
+        }
+    }
+}
+
+/// Gives the owner read, write and search permission on `dir` and every folder below it.
+/// On Linux a file can only be removed from a writable folder, and some caches (the Go
+/// module cache, for one) make all their folders read-only. Files themselves need no change.
+#[cfg(unix)]
+fn clear_readonly(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let Ok(md) = fs::symlink_metadata(dir) else { return };
+    if !md.is_dir() || md.file_type().is_symlink() {
+        return;
+    }
+    let mode = md.permissions().mode();
+    if mode & 0o700 != 0o700 {
+        let _ = fs::set_permissions(dir, fs::Permissions::from_mode(mode | 0o700));
+    }
+    let Ok(rd) = fs::read_dir(dir) else { return };
+    for entry in rd.flatten() {
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            clear_readonly(&entry.path());
+        }
+    }
+}
+
+/// Makes `path` removable after a first attempt failed.
+fn make_removable(path: &Path) {
+    let Ok(md) = fs::symlink_metadata(path) else { return };
+    #[cfg(windows)]
+    {
+        if md.is_dir() {
+            clear_readonly(path);
+        } else {
+            let mut perms = md.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    #[cfg(unix)]
+    {
+        // Removing an entry needs write permission on the folder that holds it.
+        if let Some(parent) = path.parent() {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(pm) = fs::metadata(parent) {
+                let mode = pm.permissions().mode();
+                if mode & 0o700 != 0o700 {
+                    let _ = fs::set_permissions(parent, fs::Permissions::from_mode(mode | 0o700));
+                }
+            }
+        }
+        if md.is_dir() && !md.file_type().is_symlink() {
+            clear_readonly(path);
         }
     }
 }
@@ -138,16 +214,7 @@ fn remove_children(dir: &Path) -> Vec<(String, bool)> {
                 return None;
             }
             // Second attempt after clearing read-only flags.
-            if let Ok(md) = fs::symlink_metadata(p) {
-                if md.is_dir() {
-                    clear_readonly(p);
-                } else {
-                    let mut perms = md.permissions();
-                    #[allow(clippy::permissions_set_readonly_false)]
-                    perms.set_readonly(false);
-                    let _ = fs::set_permissions(p, perms);
-                }
-            }
+            make_removable(p);
             match remove_entry(p) {
                 Ok(()) => None,
                 Err(_) if !p.exists() => None,
@@ -195,7 +262,7 @@ pub fn pnpm_prune(store: &Path) -> Result<(), String> {
         c.args(["/C", "pnpm", "store", "prune", "--store-dir"]);
         c
     } else {
-        let mut c = std::process::Command::new("pnpm");
+        let mut c = std::process::Command::new(pnpm_program());
         c.args(["store", "prune", "--store-dir"]);
         c
     };
@@ -216,4 +283,24 @@ pub fn pnpm_prune(store: &Path) -> Result<(), String> {
         let msg = if msg.trim().is_empty() { String::from_utf8_lossy(&out.stdout) } else { msg };
         Err(format!("pnpm store prune failed: {}", msg.trim()))
     }
+}
+
+/// pnpm's path. A Linux app started from the desktop menu does not get the PATH set up by
+/// the shell's startup files, so look where pnpm's own installer and corepack put it.
+fn pnpm_program() -> std::path::PathBuf {
+    let on_path = std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("pnpm").is_file()));
+    if !on_path {
+        let home = dirs::home_dir().unwrap_or_default();
+        let candidates = [
+            std::env::var_os("PNPM_HOME").map(|h| Path::new(&h).join("pnpm")),
+            dirs::data_local_dir().map(|d| d.join("pnpm").join("pnpm")),
+            Some(home.join(".local").join("bin").join("pnpm")),
+            Some(home.join(".volta").join("bin").join("pnpm")),
+        ];
+        if let Some(found) = candidates.into_iter().flatten().find(|c| c.is_file()) {
+            return found;
+        }
+    }
+    "pnpm".into()
 }
