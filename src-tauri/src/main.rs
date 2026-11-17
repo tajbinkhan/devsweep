@@ -53,16 +53,48 @@ struct Drive {
     system: bool,
 }
 
+/// Whether a mounted file system is a drive the user keeps files on. On Linux this skips
+/// boot partitions, snaps, container storage and the system subvolumes that btrfs mounts.
+#[cfg(not(windows))]
+fn is_user_drive(mount: &Path, fs: &str) -> bool {
+    const FILE_SYSTEMS: &[&str] = &[
+        "ext2", "ext3", "ext4", "btrfs", "xfs", "f2fs", "zfs", "bcachefs", "jfs", "reiserfs",
+        "ntfs", "ntfs3", "fuseblk", "exfat", "vfat", "apfs", "hfs",
+    ];
+    const SYSTEM_MOUNTS: &[&str] = &[
+        "/boot", "/efi", "/snap", "/var", "/usr", "/opt", "/srv", "/tmp", "/root", "/nix",
+        "/gnu", "/.snapshots", "/swap", "/System", "/private",
+    ];
+    FILE_SYSTEMS.contains(&fs)
+        && !SYSTEM_MOUNTS.iter().any(|m| mount.starts_with(m))
+}
+
+#[cfg(windows)]
+fn is_user_drive(_mount: &Path, _fs: &str) -> bool {
+    true
+}
+
+/// True for the drive that holds the operating system and the home folder. Only the home
+/// folder is worth walking there; the rest is the OS and installed programs.
+fn is_system_drive(mount: &str) -> bool {
+    if cfg!(windows) {
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()).to_lowercase();
+        mount.to_lowercase().starts_with(&system)
+    } else {
+        mount == "/" || dirs::home_dir().is_some_and(|h| h.starts_with(mount))
+    }
+}
+
 fn drives() -> Vec<Drive> {
     let Ok(disks) = sysinfo::Disks::new_with_refreshed_list() else { return Vec::new() };
-    let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()).to_lowercase();
     let mut out: Vec<Drive> = disks
         .iter()
         .filter(|d| !d.is_removable() && d.total_space() > 0)
+        .filter(|d| is_user_drive(d.mount_point(), &d.file_system().to_string_lossy()))
         .map(|d| {
             let mount = d.mount_point().display().to_string();
             Drive {
-                system: mount.to_lowercase().starts_with(&system),
+                system: is_system_drive(&mount),
                 label: d.name().to_string_lossy().into_owned(),
                 total: d.total_space(),
                 free: d.available_space(),
@@ -73,6 +105,23 @@ fn drives() -> Vec<Drive> {
     out.sort_by(|a, b| a.mount.cmp(&b.mount));
     out.dedup_by(|a, b| a.mount == b.mount);
     out
+}
+
+/// Every mounted file system with its free space, including the ones `drives` hides.
+fn mounts() -> Vec<(PathBuf, u64)> {
+    let Ok(disks) = sysinfo::Disks::new_with_refreshed_list() else { return Vec::new() };
+    let mut out: Vec<(PathBuf, u64)> =
+        disks.iter().map(|d| (d.mount_point().to_path_buf(), d.available_space())).collect();
+    // A mount point listed twice would count its change in free space twice.
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.dedup_by(|a, b| path_key(&a.0) == path_key(&b.0));
+    out
+}
+
+/// Comparable form of a path: Windows paths ignore case, Linux paths do not.
+fn path_key(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    if cfg!(windows) { s.to_lowercase() } else { s.into_owned() }
 }
 
 #[tauri::command]
@@ -223,7 +272,8 @@ struct Outcome {
     path: String,
     ok: bool,
     error: Option<String>,
-    /// Windows refused access. Running as administrator may get past it.
+    /// The OS refused access. Running as administrator (Windows) or fixing ownership (Linux)
+    /// may get past it.
     needs_admin: bool,
     bytes: u64,
 }
@@ -239,19 +289,23 @@ struct CleanReport {
     cancelled: bool,
 }
 
-fn drive_of(path: &str) -> String {
-    Path::new(path)
-        .ancestors()
-        .last()
-        .map(|p| p.display().to_string().to_lowercase())
+/// The mount point that holds `path`: the longest mount it sits under. On Windows that is the
+/// drive letter; on Linux it may be `/`, `/home` or a data disk under `/mnt`.
+fn drive_of(path: &str, all: &[(PathBuf, u64)]) -> String {
+    let p = PathBuf::from(path_key(Path::new(path)));
+    all.iter()
+        .map(|(m, _)| PathBuf::from(path_key(m)))
+        .filter(|m| p.starts_with(m))
+        .max_by_key(|m| m.components().count())
+        .map(|m| m.display().to_string())
         .unwrap_or_default()
 }
 
-fn free_space(mounts: &[String]) -> i64 {
-    drives()
+fn free_space(chosen: &[String]) -> i64 {
+    mounts()
         .iter()
-        .filter(|d| mounts.contains(&d.mount.to_lowercase()))
-        .map(|d| d.free as i64)
+        .filter(|(m, _)| chosen.contains(&path_key(m)))
+        .map(|(_, free)| *free as i64)
         .sum()
 }
 
@@ -271,7 +325,8 @@ fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String
         let map = shared.items.lock().unwrap();
         ids.iter().map(|id| map.get(id).cloned()).collect()
     };
-    let mut mounts: Vec<String> = known.iter().flatten().map(|i| drive_of(&i.path)).collect();
+    let all = mounts();
+    let mut mounts: Vec<String> = known.iter().flatten().map(|i| drive_of(&i.path, &all)).collect();
     mounts.sort();
     mounts.dedup();
     let before = free_space(&mounts);
@@ -354,6 +409,10 @@ struct AppInfo {
     elevated: bool,
     /// Started by "Restart as administrator", which asks for a scan right away.
     auto_scan: bool,
+    /// "windows", "linux" or "macos". The UI words a few things differently per platform.
+    platform: &'static str,
+    /// Whether "Restart as administrator" is offered. Only Windows has a way to do it safely.
+    can_elevate: bool,
 }
 
 #[tauri::command]
@@ -361,6 +420,8 @@ fn app_info() -> AppInfo {
     AppInfo {
         elevated: elevate::is_elevated(),
         auto_scan: std::env::args().any(|a| a == "--scan"),
+        platform: std::env::consts::OS,
+        can_elevate: elevate::CAN_ELEVATE,
     }
 }
 
@@ -375,6 +436,14 @@ fn restart_as_admin(app: AppHandle, state: State<'_, Arc<Shared>>, scan: bool) -
 }
 
 fn main() {
+    // WebKitGTK's DMA-BUF renderer shows a blank or flickering window on many NVIDIA and
+    // some Wayland setups. This app draws a table, not video, so the slower path is fine.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // SAFETY: runs first in main, before any other thread exists.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
+
     let args: Vec<String> = std::env::args().collect();
     if let Some(pid) = args.iter().position(|a| a == "--after").and_then(|i| args.get(i + 1)) {
         if let Ok(pid) = pid.parse() {

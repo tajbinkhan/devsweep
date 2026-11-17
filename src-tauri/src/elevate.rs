@@ -1,5 +1,12 @@
 //! Running as administrator. Some build folders are created by an elevated terminal or
 //! another account, and only an elevated DevSweep can delete them.
+//!
+//! On Windows DevSweep can restart itself through the UAC prompt. On Linux it does not:
+//! running a WebKitGTK window as root is unsafe and often fails under Wayland, so the UI
+//! explains how to fix the folder's owner instead.
+
+/// Whether `relaunch_elevated` is available on this platform.
+pub const CAN_ELEVATE: bool = cfg!(windows);
 
 /// True when this process runs with an elevated (administrator) token.
 #[cfg(windows)]
@@ -28,7 +35,14 @@ pub fn is_elevated() -> bool {
     }
 }
 
-#[cfg(not(windows))]
+/// True when this process runs as root.
+#[cfg(unix)]
+pub fn is_elevated() -> bool {
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    unsafe { libc::geteuid() == 0 }
+}
+
+#[cfg(not(any(windows, unix)))]
 pub fn is_elevated() -> bool {
     false
 }
@@ -77,7 +91,9 @@ pub fn relaunch_elevated(scan: bool) -> Result<(), String> {
 
 #[cfg(not(windows))]
 pub fn relaunch_elevated(_scan: bool) -> Result<(), String> {
-    Err("Restarting as administrator is only supported on Windows".into())
+    Err("Restarting as administrator is only available on Windows. Change the folder's owner \
+         with chown, or delete it with sudo, then scan again."
+        .into())
 }
 
 /// Called at startup with the `--after <pid>` argument: waits up to five seconds for the

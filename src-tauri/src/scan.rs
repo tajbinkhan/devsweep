@@ -64,8 +64,10 @@ struct Walk<'a> {
     out: Mutex<Vec<(PathBuf, &'static rules::ProjectRule)>>,
 }
 
+/// Comparable form of a path: Windows ignores case, Linux does not.
 fn key(p: &Path) -> String {
-    p.to_string_lossy().to_lowercase()
+    let s = p.to_string_lossy();
+    if cfg!(windows) { s.to_lowercase() } else { s.into_owned() }
 }
 
 /// True for symlinks and Windows junctions. The walker never follows them.

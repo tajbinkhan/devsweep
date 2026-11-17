@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,16 +53,63 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  linux:
+    # The oldest supported Ubuntu, so the .deb and AppImage run on older glibc too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Run tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Build .deb, .rpm and AppImage
+        run: npm run build
+
+      - name: Collect packages
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/release/bundle/deb/*.deb dist/
+          cp src-tauri/target/release/bundle/rpm/*.rpm dist/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DevSweep-linux
+          path: dist/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: DevSweep-windows
+          pattern: DevSweep-*
+          merge-multiple: true
           path: dist
 
       - uses: softprops/action-gh-release@v2

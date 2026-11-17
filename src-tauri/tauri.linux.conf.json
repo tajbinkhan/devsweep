@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "rpm", "appimage"],
+    "category": "Utility",
+    "shortDescription": "Find and delete rebuildable developer files",
+    "longDescription": "DevSweep finds build output, dependency folders and package caches that your development tools can rebuild, such as node_modules, Rust target folders and the npm and Cargo caches, and deletes the ones you pick."
+  }
+}

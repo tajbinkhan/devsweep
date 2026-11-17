@@ -15,7 +15,24 @@ const state = {
   query: "",
   scanning: false,
   elevated: false,
+  canElevate: true,
+  platform: "windows",
 };
+
+/* Platform wording. The backend reports the OS in app_info. */
+
+const isWindows = () => state.platform === "windows";
+const fileManager = () => (isWindows() ? "Explorer" : state.platform === "macos" ? "Finder" : "the file manager");
+const sep = () => (isWindows() ? "\\" : "/");
+
+function applyPlatformText() {
+  if (isWindows()) return;
+  $("rule-skip").innerHTML =
+    "System folders such as <code>/usr</code> and <code>/opt</code>, <code>~/.config</code>, <code>~/.local</code>, " +
+    "<code>~/.cache</code>, Flatpak and Snap apps, editor extensions, Node version managers and <code>.git</code> " +
+    "are never scanned, so installed programs are not touched.";
+  $("confirm-fine").textContent = "Files are deleted permanently. They do not go to the Trash.";
+}
 
 /* Formatting */
 
@@ -79,7 +96,7 @@ async function renderDrives() {
       const used = d.total ? 1 - d.free / d.total : 0;
       const low = d.free / d.total < 0.1;
       return `<div class="drive" title="${esc(d.label || d.mount)}">
-        <span class="drive-name">${esc(d.mount.replace(/\\$/, ""))}</span>
+        <span class="drive-name">${esc(d.mount.length > 1 ? d.mount.replace(/[\\/]$/, "") : d.mount)}</span>
         <div class="drive-meter ${low ? "low" : ""}"><div style="width:${(used * 100).toFixed(1)}%"></div></div>
         <span class="drive-free">${fmtBytes(d.free)} free of ${fmtBytes(d.total)}</span>
       </div>`;
@@ -111,7 +128,8 @@ $("add-root").addEventListener("click", async () => {
   const picked = await dialog.open({ directory: true, multiple: true, title: "Choose folders to scan" });
   if (!picked) return;
   for (const p of Array.isArray(picked) ? picked : [picked]) {
-    if (!state.roots.some((r) => r.toLowerCase() === p.toLowerCase())) state.roots.push(p);
+    const same = (r) => (isWindows() ? r.toLowerCase() === p.toLowerCase() : r === p);
+    if (!state.roots.some(same)) state.roots.push(p);
   }
   saveRoots();
   renderRoots();
@@ -297,7 +315,7 @@ function render() {
         <td class="eco">${esc(it.ecosystem)}</td>
         <td class="age ${days < 7 ? "recent" : ""}">${fmtAge(it.lastWrite)}</td>
         <td>${badge}<span class="restore" title="${esc(it.restore)}">${esc(it.restore)}</span></td>
-        <td><button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in Explorer" aria-label="Show ${esc(it.path)} in Explorer">${REVEAL_ICON}</button></td>
+        <td><button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in ${fileManager()}" aria-label="Show ${esc(it.path)} in ${fileManager()}">${REVEAL_ICON}</button></td>
       </tr>`;
     })
     .join("");
@@ -328,7 +346,7 @@ function render() {
 function projectName(it) {
   if (!it.project) return "";
   const parts = it.project.split(/[\\/]/).filter(Boolean);
-  return parts.slice(-2).join("\\");
+  return parts.slice(-2).join(sep());
 }
 
 function selectedItems() {
@@ -426,16 +444,24 @@ function showReport(report, error) {
   $("report-fails").innerHTML = failed
     .map((f) => `<li><div class="f-path">${esc(f.path)}</div><div class="f-err">${esc(f.error)}</div></li>`)
     .join("");
-  const denied = failed.filter((f) => f.needsAdmin).length;
-  const offerAdmin = denied > 0 && !state.elevated;
-  $("admin-note").hidden = !offerAdmin;
+  const deniedItems = failed.filter((f) => f.needsAdmin);
+  const denied = deniedItems.length;
+  const one = denied === 1;
+  const offerAdmin = denied > 0 && !state.elevated && state.canElevate;
+  const explainOwner = denied > 0 && !state.elevated && !state.canElevate;
+  $("admin-note").hidden = !(offerAdmin || explainOwner);
   $("restart-admin").hidden = !offerAdmin;
   if (offerAdmin) {
-    const one = denied === 1;
     $("admin-note").textContent =
       `Windows refused access to ${one ? "this folder" : `${denied} of these folders`}. ` +
       `${one ? "It was" : "They were"} probably created by a program running as administrator. ` +
       `Restart DevSweep as administrator and it will scan again, so you can delete ${one ? "it" : "them"} there.`;
+  } else if (explainOwner) {
+    const quoted = deniedItems.map((f) => `'${f.path.replace(/'/g, "'\\''")}'`).join(" ");
+    $("admin-note").textContent =
+      `Permission was denied for ${one ? "this folder" : `${denied} of these folders`}. ` +
+      `${one ? "It" : "They"} probably contain${one ? "s" : ""} files owned by root, for example from sudo or a Docker build. ` +
+      `To take ownership back, run: sudo chown -R "$USER": ${quoted}  then scan again.`;
   }
   $("report").showModal();
   render();
@@ -458,6 +484,9 @@ $("restart-admin").addEventListener("click", async () => {
   renderDrives();
   const info = await invoke("app_info");
   state.elevated = info.elevated;
+  state.canElevate = info.canElevate;
+  state.platform = info.platform;
+  applyPlatformText();
   $("admin-badge").hidden = !info.elevated;
   if (info.autoScan) runScan();
 })();

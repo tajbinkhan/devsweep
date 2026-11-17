@@ -734,6 +734,7 @@ name = "devsweep"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "libc",
  "rayon",
  "serde",
  "serde_json",

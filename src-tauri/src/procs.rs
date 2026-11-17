@@ -19,6 +19,9 @@ const DEV_TOOLS: &[&str] = &[
     "ninja", "make", "mvn", "gradle", "esbuild", "vite", "next-server",
 ];
 
+/// Comparable form of a path with a trailing separator, so `starts_with` only matches whole
+/// folder names. Windows paths ignore case and may carry a `\\?\` prefix.
+#[cfg(windows)]
 fn norm(p: &Path) -> String {
     let mut s = p.to_string_lossy().replace('/', "\\").to_lowercase();
     if let Some(stripped) = s.strip_prefix(r"\\?\") {
@@ -30,8 +33,29 @@ fn norm(p: &Path) -> String {
     s
 }
 
+#[cfg(not(windows))]
+fn norm(p: &Path) -> String {
+    // Linux reports the folder of a deleted executable or cwd with this suffix.
+    let mut s = p.to_string_lossy().trim_end_matches(" (deleted)").to_string();
+    if !s.ends_with('/') {
+        s.push('/');
+    }
+    s
+}
+
+/// Lower-case program name without `.exe`. Versioned Linux names such as `python3.12` and
+/// `java-17` count as the plain tool.
 fn stem(name: &str) -> String {
-    name.to_lowercase().trim_end_matches(".exe").to_string()
+    let name = name.to_lowercase();
+    let name = name.trim_end_matches(".exe");
+    for tool in ["python", "pythonw", "java", "node", "ruby", "php", "dotnet"] {
+        if let Some(rest) = name.strip_prefix(tool) {
+            if rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-') {
+                return tool.to_string();
+            }
+        }
+    }
+    name.to_string()
 }
 
 pub fn snapshot() -> Vec<Proc> {
@@ -45,11 +69,25 @@ pub fn snapshot() -> Vec<Proc> {
     );
     sys.processes()
         .iter()
-        .map(|(pid, p)| Proc {
-            pid: pid.as_u32(),
-            name: stem(&p.name().to_string_lossy()),
-            exe: p.exe().map(norm),
-            cwd: p.cwd().map(norm),
+        // Linux lists every thread as well; the process itself is enough.
+        .filter(|(_, p)| p.thread_kind().is_none())
+        .map(|(pid, p)| {
+            // Linux cuts process names to 15 characters and lets programs rename themselves
+            // (`next-server (v15...)`), so the executable's file name is more reliable there.
+            let name = if cfg!(windows) {
+                p.name().to_string_lossy().into_owned()
+            } else {
+                p.exe()
+                    .and_then(|e| e.file_name())
+                    .map(|n| n.to_string_lossy().trim_end_matches(" (deleted)").to_string())
+                    .unwrap_or_else(|| p.name().to_string_lossy().into_owned())
+            };
+            Proc {
+                pid: pid.as_u32(),
+                name: stem(&name),
+                exe: p.exe().map(norm),
+                cwd: p.cwd().map(norm),
+            }
         })
         .collect()
 }
