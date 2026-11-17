@@ -1,10 +1,32 @@
-# DevSweep
+<h1 align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="DevSweep: finds the folders your dev tools can rebuild and deletes only the ones that are safe">
+</h1>
 
-DevSweep is a desktop app for Windows and Linux that finds the files your development tools can rebuild and deletes the ones you pick. That means `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
+DevSweep is a desktop app for Windows and Linux that finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
 
-![DevSweep after a scan](assets/screenshot.png)
+<p align="center">
+  <a href="https://github.com/tajbinkhan/devsweep/releases"><b>Download for Windows or Linux</b></a>
+  &nbsp;·&nbsp; <a href="#how-it-avoids-breaking-things">How it stays safe</a>
+  &nbsp;·&nbsp; <a href="#how-it-compares">How it compares</a>
+</p>
 
-## The problem
+![DevSweep after a scan: project folders sorted by size, each with its type, age and the command that brings it back](assets/screenshot.png)
+
+## Contents
+
+- [Why DevSweep](#why-devsweep)
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [What it removes](#what-it-removes)
+- [How it avoids breaking things](#how-it-avoids-breaking-things)
+- [How it compares](#how-it-compares)
+- [Limits](#limits)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Why DevSweep
 
 Every project you clone, try or abandon leaves a copy of its dependencies and build output on disk. None of it is source code, and all of it comes back with one command, but it piles up quietly:
 
@@ -14,30 +36,72 @@ Every project you clone, try or abandon leaves a copy of its dependencies and bu
 
 On the machine DevSweep was written on, Rust `target` folders alone took 63 GB of a 100 GB drive.
 
-You can delete these by hand, but you have to find them first, and you have to know which `build` or `target` folder is safe to delete. A folder called `build` might be Gradle output or might be your own build scripts. A `node_modules` folder inside `Program Files` belongs to an installed app, and deleting it breaks that app.
+Deleting these by hand means finding them first and knowing which ones are safe. A folder called `build` might be Gradle output or your own build scripts. A `node_modules` inside `Program Files` belongs to an installed app, and deleting it breaks that app. DevSweep makes that call for you, and shows its reasoning.
 
-## What DevSweep does
+## Features
 
-1. **Scan.** Pick drives or folders. DevSweep walks them in parallel and lists every folder that a build tool or package manager owns, with its size, its age and the command that brings it back.
-2. **Review.** Results are sorted by size. Folders unchanged for 30 days are selected for you; change that to 7, 90 days or anything. Folders a running program is using are locked.
-3. **Delete.** DevSweep checks every folder again, deletes it, and reports how much free space you actually got back.
+- **Finds build output across every project at once.** 29 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig and Haskell.
+- **Only offers folders a project owns.** Each match needs its project file next to it, and ambiguous names like `build` or `target` also need a file the build tool writes inside.
+- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Cargo, pip, uv, Gradle, Maven, NuGet, Go, Electron, Playwright, Cypress and more.
+- **Locks folders in use.** Anything a running program or dev tool is using can't be selected.
+- **Stays out of installed programs** and system folders through a fixed exclusion list.
+- **Reports real savings.** Shows the change in free disk space, not just the counted size, so hard-linked pnpm and Cargo files don't inflate the number.
+- **Runs as a normal user** and never elevates on its own.
 
-## Download
+## Installation
 
-Grab the latest build from the [Releases page](https://github.com/tajbinkhan/devsweep/releases):
+Download the latest build from the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
+
+### Windows
 
 - `DevSweep_x.y.z_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
 - `DevSweep_x.y.z_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
-DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with. The builds are not code-signed, so SmartScreen may show "Windows protected your PC" the first time. Click "More info", then "Run anyway".
+DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with. The builds are not code-signed, so SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
 
-On Linux, pick the package for your distribution:
+### Linux
 
-- `DevSweep_x.y.z_amd64.deb` for Debian, Ubuntu, Mint and Pop!_OS: `sudo apt install ./DevSweep_x.y.z_amd64.deb`
-- `DevSweep-x.y.z-1.x86_64.rpm` for Fedora, RHEL and openSUSE: `sudo dnf install ./DevSweep-x.y.z-1.x86_64.rpm`
-- `DevSweep_x.y.z_amd64.AppImage` runs anywhere without installing: `chmod +x DevSweep_*.AppImage`, then run it
+Debian, Ubuntu, Mint and Pop!_OS:
+
+```bash
+sudo apt install ./DevSweep_x.y.z_amd64.deb
+```
+
+Fedora, RHEL and openSUSE:
+
+```bash
+sudo dnf install ./DevSweep-x.y.z-1.x86_64.rpm
+```
+
+Any distribution, without installing:
+
+```bash
+chmod +x DevSweep_*.AppImage
+./DevSweep_*.AppImage
+```
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
+
+## Usage
+
+<p align="center">
+  <img src="assets/readme/workflow.svg" width="100%" alt="Scan, Review, Delete: the checks DevSweep runs at each step">
+</p>
+
+1. **Scan.** Pick drives or folders. DevSweep walks them in parallel and lists every folder that a build tool or package manager owns, with its size, its age and the command that brings it back.
+2. **Review.** Results are sorted by size. Folders unchanged for 30 days are selected for you; change that to 7, 90 days or anything else. Folders a running program is using are locked, and Python virtual environments and PHP `vendor` folders are marked "Check first" and never selected automatically.
+3. **Delete.** DevSweep checks every folder again, deletes it, and reports how much free space you actually got back.
+
+Files are deleted permanently. They don't go to the Recycle Bin or the Trash, because moving 50 GB of `node_modules` there frees nothing.
+
+**If a folder reports "Access is denied":**
+
+- On Windows, a terminal running as administrator usually created it. The report offers **Restart as administrator**, which goes through the UAC prompt and scans again with the same rules and checks.
+- On Linux, the folder usually holds root-owned files from `sudo npm install` or a Docker build. The report shows the `chown` command that gives it back to you, for example:
+
+  ```bash
+  sudo chown -R "$USER": ~/projects/my-app/node_modules
+  ```
 
 ## What it removes
 
@@ -74,8 +138,6 @@ The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 - **It runs as a normal user.** Some folders return "Access is denied", usually because a terminal running as administrator created them. On Windows the report then offers "Restart as administrator", which goes through the UAC prompt and scans again. DevSweep never asks for elevation on its own, and the same rules and checks apply when elevated. On Linux such folders usually hold files owned by root, from `sudo npm install` or a Docker build. DevSweep does not run itself as root; the report shows the `chown` command that gives the folder back to you.
 - **It reports what really changed.** pnpm and Cargo use hard links, so a folder's size can overstate what deleting it frees. The report shows the change in free disk space next to the counted size.
 
-Files are deleted permanently. They don't go to the Recycle Bin or the Trash, because moving 50 GB of `node_modules` there frees nothing.
-
 ## How it compares
 
 | | DevSweep | [kondo](https://github.com/tbillington/kondo) | [npkill](https://github.com/voidcosmos/npkill) | WizTree, WinDirStat | Storage Sense, Disk Cleanup | `cargo clean`, `npm cache clean` and friends |
@@ -83,7 +145,7 @@ Files are deleted permanently. They don't go to the Recycle Bin or the Trash, be
 | Interface | Desktop GUI | CLI, plus a separate GUI | Terminal UI | Desktop GUI | Windows Settings | Command line |
 | Finds build output across many projects | Yes, 29 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
 | Checks the owning project file | Yes, plus a marker inside for ambiguous names | Yes | No, it matches folder names | No | n/a | n/a |
-| Global package caches | Yes, 22 locations | No | No | Shows them | No | One tool each |
+| Global package caches | Yes, over 20 locations | No | No | Shows them | No | One tool each |
 | Skips folders a running program uses | Yes | No | No | No | n/a | Some tools refuse while locked |
 | Keeps out of installed apps | Fixed exclusion list | No | Flags them with a warning | No | n/a | n/a |
 | Platforms | Windows, Linux | Windows, macOS, Linux | Anywhere Node.js runs | Windows | Windows | All |
@@ -106,42 +168,67 @@ DevSweep is for the case where you want all of that in one pass, on Windows or L
 - Deletion is permanent.
 - The rule list covers common toolchains. If yours is missing, add a rule in `src-tauri/src/rules.rs`. Each rule is about ten lines.
 
-## Build from source
+## Development
 
-You need Node.js 20 or later, Rust (stable), and the MSVC build tools. A MinGW toolchain with `windres` on `PATH` and the `x86_64-pc-windows-gnu` Rust target also works; the exe then needs `WebView2Loader.dll` next to it.
+DevSweep is a [Tauri 2](https://tauri.app) app: a Rust backend in `src-tauri/` and a plain HTML, CSS and JavaScript interface in `ui/` with no build step.
+
+### Prerequisites
+
+- Node.js 20 or later
+- Rust (stable)
+- **Windows:** the MSVC build tools. A MinGW toolchain with `windres` on `PATH` and the `x86_64-pc-windows-gnu` Rust target also works; the exe then needs `WebView2Loader.dll` next to it.
+- **Linux:** the WebKitGTK and GTK development packages.
+
+  Debian and Ubuntu:
+
+  ```bash
+  sudo apt install libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
+
+  Fedora:
+
+  ```bash
+  sudo dnf install webkit2gtk4.1-devel openssl-devel libxdo-devel libappindicator-gtk3-devel librsvg2-devel
+  ```
+
+### Run from source
 
 ```bash
+git clone https://github.com/tajbinkhan/devsweep.git
+cd devsweep
 npm ci
 npm run dev
 ```
 
-Run the tests. They build fake projects in the temp folder and check what gets found and deleted, including junctions and symlinks, read-only files and folders, and folders whose project file vanished after the scan:
+### Test
+
+The tests build fake projects in the temp folder and check what gets found and deleted, including junctions and symlinks, read-only files and folders, and folders whose project file vanished after the scan:
 
 ```bash
 cd src-tauri && cargo test
 ```
 
-On Linux you also need the WebKitGTK and GTK development packages. On Debian and Ubuntu:
+GitHub Actions runs them on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
 
-```bash
-sudo apt install libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-```
-
-On Fedora:
-
-```bash
-sudo dnf install webkit2gtk4.1-devel openssl-devel libxdo-devel libappindicator-gtk3-devel librsvg2-devel
-```
-
-Build the packages. On Windows the installer lands in `src-tauri/target/release/bundle/nsis`; on Linux the `.deb`, `.rpm` and AppImage land in `src-tauri/target/release/bundle/deb`, `rpm` and `appimage`:
+### Build packages
 
 ```bash
 npm run build
 ```
 
-GitHub Actions runs the tests on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
+On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Linux the `.deb`, `.rpm` and AppImage land in `src-tauri/target/release/bundle/deb`, `rpm` and `appimage`.
 
-## Publishing a release
+### Code layout
+
+- `ui/` is the interface: plain HTML, CSS and JavaScript with no build step
+- `src-tauri/src/rules.rs` decides which folders count, where the scanner never goes, and which global caches exist
+- `src-tauri/src/scan.rs` walks folders in parallel and measures sizes
+- `src-tauri/src/procs.rs` finds running programs that use a folder
+- `src-tauri/src/clean.rs` deletes, and holds the last-chance path checks
+- `src-tauri/src/main.rs` has the Tauri commands
+- `src-tauri/src/tests.rs` has the tests against fake projects
+
+### Publishing a release
 
 Downloads are built only when a GitHub Release is published ([`release.yml`](.github/workflows/release.yml)):
 
@@ -151,15 +238,13 @@ Downloads are built only when a GitHub Release is published ([`release.yml`](.gi
 
 The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
-## Code layout
+## Contributing
 
-- `ui/` is the interface: plain HTML, CSS and JavaScript with no build step
-- `src-tauri/src/rules.rs` decides which folders count, where the scanner never goes, and which global caches exist
-- `src-tauri/src/scan.rs` walks folders in parallel and measures sizes
-- `src-tauri/src/procs.rs` finds running programs that use a folder
-- `src-tauri/src/clean.rs` deletes, and holds the last-chance path checks
-- `src-tauri/src/main.rs` has the Tauri commands
-- `src-tauri/src/tests.rs` has the tests against fake projects
+Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbinkhan/devsweep/issues).
+
+- **Missing toolchain?** Add a `ProjectRule` to `PROJECT_RULES` in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs) (about ten lines), or a line to `cache_entries` for a global cache. Add a case to [`src-tauri/src/tests.rs`](src-tauri/src/tests.rs) that builds a fake project and checks the folder is found, and that a lookalike folder without the project file is not.
+- **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
+- Run `cargo test` in `src-tauri` before opening a pull request. CI runs the same tests on Windows and Linux.
 
 ## License
 

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">How DevSweep cleans: Scan, Review, Delete</title>
+  <desc id="desc">Scan walks drives in parallel, keeps only folders with their project file next to them and a build marker inside, and skips installed apps. Review sorts by size, preselects folders unused for 30 days, locks folders in use, and marks venv and vendor as Check first. Delete checks each folder again, never follows links, and reports the free space actually gained.</desc>
+
+  <style>
+    .sans { font-family: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif; }
+    .mono { font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+  </style>
+
+  <defs>
+    <!-- Status marks reused from the app's badges -->
+    <g id="ok">
+      <circle r="12" fill="#123a2e"/>
+      <path d="M-5 0.5l3.5 3.5 6.5-7" fill="none" stroke="#6ee7b7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g id="no">
+      <circle r="12" fill="#3b1d0e"/>
+      <path d="M-4.5-4.5l9 9M4.5-4.5l-9 9" fill="none" stroke="#f97316" stroke-width="2.4" stroke-linecap="round"/>
+    </g>
+    <g id="lock">
+      <circle r="12" fill="#232c3b"/>
+      <rect x="-5.5" y="-1.5" width="11" height="8" rx="1.8" fill="#b4c0d6"/>
+      <path d="M-3.2-1.5v-2.3a3.2 3.2 0 0 1 6.4 0v2.3" fill="none" stroke="#b4c0d6" stroke-width="2"/>
+    </g>
+    <g id="warn">
+      <circle r="12" fill="#352a0b"/>
+      <path d="M0-5.5v6" stroke="#fbbf24" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cy="5" r="1.6" fill="#fbbf24"/>
+    </g>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="1199" height="359" rx="24" fill="#0f1514" stroke="#2a3632"/>
+
+  <!-- Step 1: Scan -->
+  <g transform="translate(48 40)">
+    <rect width="344" height="280" rx="14" fill="#161e1c" stroke="#2a3632"/>
+    <text x="28" y="48" class="mono" font-size="18" font-weight="700" fill="#34d399">01</text>
+    <text x="64" y="50" class="sans" font-size="32" font-weight="700" fill="#e6eeeb">Scan</text>
+    <text x="28" y="92" class="sans" font-size="20" fill="#9aaaa5">Walks drives in parallel</text>
+    <line x1="28" y1="114" x2="316" y2="114" stroke="#2a3632"/>
+    <use href="#ok" x="44" y="148"/>
+    <text x="68" y="155" class="sans" font-size="20" fill="#e6eeeb">Project file next to it</text>
+    <use href="#ok" x="44" y="196"/>
+    <text x="68" y="203" class="sans" font-size="20" fill="#e6eeeb">Build marker inside</text>
+    <use href="#no" x="44" y="244"/>
+    <text x="68" y="251" class="sans" font-size="20" fill="#e6eeeb">Skips installed apps</text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M398 180h12m-5-6l6 6-6 6" fill="none" stroke="#6d7c78" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Step 2: Review -->
+  <g transform="translate(428 40)">
+    <rect width="344" height="280" rx="14" fill="#161e1c" stroke="#2a3632"/>
+    <text x="28" y="48" class="mono" font-size="18" font-weight="700" fill="#34d399">02</text>
+    <text x="64" y="50" class="sans" font-size="32" font-weight="700" fill="#e6eeeb">Review</text>
+    <text x="28" y="92" class="sans" font-size="20" fill="#9aaaa5">Sorted by size</text>
+    <line x1="28" y1="114" x2="316" y2="114" stroke="#2a3632"/>
+    <use href="#ok" x="44" y="148"/>
+    <text x="68" y="155" class="sans" font-size="20" fill="#e6eeeb">Unused 30 days: selected</text>
+    <use href="#lock" x="44" y="196"/>
+    <text x="68" y="203" class="sans" font-size="20" fill="#e6eeeb">Folders in use are locked</text>
+    <use href="#warn" x="44" y="244"/>
+    <text x="68" y="251" class="sans" font-size="20" fill="#e6eeeb">venv, vendor: <tspan fill="#f97316">Check first</tspan></text>
+  </g>
+
+  <!-- Arrow -->
+  <path d="M778 180h12m-5-6l6 6-6 6" fill="none" stroke="#6d7c78" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Step 3: Delete -->
+  <g transform="translate(808 40)">
+    <rect width="344" height="280" rx="14" fill="#161e1c" stroke="#2a3632"/>
+    <text x="28" y="48" class="mono" font-size="18" font-weight="700" fill="#f97316">03</text>
+    <text x="64" y="50" class="sans" font-size="32" font-weight="700" fill="#e6eeeb">Delete</text>
+    <text x="28" y="92" class="sans" font-size="20" fill="#9aaaa5">Checks every folder again</text>
+    <line x1="28" y1="114" x2="316" y2="114" stroke="#2a3632"/>
+    <use href="#ok" x="44" y="148"/>
+    <text x="68" y="155" class="sans" font-size="20" fill="#e6eeeb">Still owned, still unused</text>
+    <use href="#no" x="44" y="196"/>
+    <text x="68" y="203" class="sans" font-size="20" fill="#e6eeeb">Never follows links</text>
+    <use href="#ok" x="44" y="244"/>
+    <text x="68" y="251" class="sans" font-size="20" fill="#e6eeeb">Reports real space freed</text>
+  </g>
+</svg>
