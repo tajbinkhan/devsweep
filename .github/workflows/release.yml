@@ -1,0 +1,119 @@
+name: Release
+
+# Publishing a GitHub Release (for example with tag v0.2.0) builds DevSweep for Windows and
+# Linux and attaches the downloads to that release. The version inside the app and in the
+# file names comes from the tag, so tauri.conf.json does not need editing for each release.
+#
+# Running the workflow by hand builds everything as workflow artifacts without publishing,
+# which is useful to try a build before releasing it.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          # The oldest supported Ubuntu, so the .deb and AppImage run on older glibc too.
+          - name: linux
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -n "$TAG" ]; then
+            version="${TAG#v}"
+          else
+            version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+          # The Windows installer and the .deb/.rpm need a plain x.y.z version.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag '$TAG' must look like v1.2.3"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "{\"version\": \"$version\"}" > "$RUNNER_TEMP/version.conf.json"
+          echo "Building DevSweep $version"
+
+      - name: Install system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Run tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Build
+        run: npx tauri build --config "$RUNNER_TEMP/version.conf.json"
+
+      - name: Collect Windows downloads
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = "src-tauri/target/release"
+          $files = @("$out/devsweep.exe")
+          if (Test-Path "$out/WebView2Loader.dll") { $files += "$out/WebView2Loader.dll" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path $files -DestinationPath "dist/DevSweep_${{ steps.version.outputs.version }}_x64-portable.zip" -Force
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe dist/
+
+      - name: Collect Linux downloads
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/release/bundle/deb/*.deb dist/
+          cp src-tauri/target/release/bundle/rpm/*.rpm dist/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage dist/
+
+      - name: Attach downloads to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Keep downloads as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DevSweep-${{ matrix.name }}-${{ steps.version.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
