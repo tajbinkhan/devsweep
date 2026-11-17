@@ -27,7 +27,7 @@ You can delete these by hand, but you have to find them first, and you have to k
 Grab the latest build from the [Releases page](https://github.com/tajbinkhan/devsweep/releases):
 
 - `DevSweep_x.y.z_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
-- `DevSweep-portable.zip` holds the exe on its own. Unzip and run it.
+- `DevSweep_x.y.z_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
 DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with. The builds are not code-signed, so SmartScreen may show "Windows protected your PC" the first time. Click "More info", then "Run anyway".
 
@@ -139,7 +139,17 @@ Build the packages. On Windows the installer lands in `src-tauri/target/release/
 npm run build
 ```
 
-GitHub Actions runs the tests and builds the Windows and Linux downloads on every push to `main`. Pushing a tag such as `v0.2.0` also publishes a release with all of them attached. See [`.github/workflows/build.yml`](.github/workflows/build.yml).
+GitHub Actions runs the tests on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
+
+## Publishing a release
+
+Downloads are built only when a GitHub Release is published ([`release.yml`](.github/workflows/release.yml)):
+
+1. On GitHub, open **Releases**, then **Draft a new release**.
+2. Create a tag such as `v0.2.0`. It must be `v` followed by three numbers.
+3. Write the notes, or click **Generate release notes**, then **Publish release**.
+
+The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
 ## Code layout
 
