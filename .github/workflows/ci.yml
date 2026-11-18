@@ -1,6 +1,6 @@
 name: CI
 
-# Runs the tests on every push to main and every pull request. Building and publishing
+# Runs the tests and clippy on every push to main and every pull request. Building and publishing
 # the downloads happens in release.yml when a GitHub Release is published.
 
 on:
@@ -31,11 +31,24 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Run tests
         working-directory: src-tauri
         run: cargo test
+
+      - name: Lint
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test the interface logic
+        run: node --test tests/ui

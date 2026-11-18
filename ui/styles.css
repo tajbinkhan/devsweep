@@ -262,7 +262,7 @@ table.items { width: 100%; border-collapse: separate; border-spacing: 0; backgro
 .col-eco { width: 110px; }
 .col-age { width: 120px; }
 .col-safety { width: 230px; }
-.col-act { width: 48px; }
+.col-act { width: 72px; }
 input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent-strong); cursor: pointer; }
 input[type="checkbox"]:disabled { cursor: not-allowed; }
 
@@ -286,6 +286,13 @@ input[type="checkbox"]:disabled { cursor: not-allowed; }
 .badge.locked { background: var(--lock-soft); color: var(--lock); }
 .restore { display: block; margin-top: 3px; font: 11.5px var(--mono); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.size-of { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; margin-left: 4px; font-weight: 400; }
+.badge.kept { background: var(--surface-2); color: var(--muted); }
+.row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.icon-btn.on { color: var(--accent-strong); }
+.icon-btn.on svg { fill: currentColor; }
+.keep-list li { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.keep-list .f-path { flex: 1; }
 .icon-btn { border: 0; background: transparent; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; color: var(--muted); display: grid; place-items: center; }
 .icon-btn:hover { background: var(--line); color: var(--text); }
 .icon-btn svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linejoin: round; }

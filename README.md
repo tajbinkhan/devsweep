@@ -18,6 +18,7 @@ DevSweep is a desktop app for Windows and Linux that finds the files your develo
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Command line](#command-line)
 - [What it removes](#what-it-removes)
 - [How it avoids breaking things](#how-it-avoids-breaking-things)
 - [How it compares](#how-it-compares)
@@ -40,12 +41,15 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 ## Features
 
-- **Finds build output across every project at once.** 29 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig and Haskell.
+- **Finds build output across every project at once.** 42 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig, Haskell, Terraform, Unity and Unreal.
 - **Only offers folders a project owns.** Each match needs its project file next to it, and ambiguous names like `build` or `target` also need a file the build tool writes inside.
-- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Cargo, pip, uv, Gradle, Maven, NuGet, Go, Electron, Playwright, Cypress and more.
-- **Locks folders in use.** Anything a running program or dev tool is using can't be selected.
+- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Hugging Face, Electron, Playwright, Cypress and more.
+- **Knows which projects you still use.** "Unused for 30 days" goes by when you last worked on the project, not when its `node_modules` was installed.
+- **Locks folders in use.** Anything a running program or dev tool is using can't be selected, and a cache can't be cleaned while its package manager is installing.
+- **Keeps what you tell it to.** Mark a project as kept and it is never offered again.
 - **Stays out of installed programs** and system folders through a fixed exclusion list.
-- **Reports real savings.** Shows the change in free disk space, not just the counted size, so hard-linked pnpm and Cargo files don't inflate the number.
+- **Shows real savings before you delete.** On Linux, sizes count a hard-linked file once and leave out files shared with the pnpm store, so a pnpm `node_modules` shows what deleting it actually frees. After deleting, the report shows the change in free disk space.
+- **Exports the list** as CSV or JSON, and has a [command line](#command-line) for scripts and scheduled cleanups.
 - **Runs as a normal user** and never elevates on its own.
 
 ## Installation
@@ -89,8 +93,10 @@ The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on thei
 </p>
 
 1. **Scan.** Pick drives or folders. DevSweep walks them in parallel and lists every folder that a build tool or package manager owns, with its size, its age and the command that brings it back.
-2. **Review.** Results are sorted by size. Folders unchanged for 30 days are selected for you; change that to 7, 90 days or anything else. Folders a running program is using are locked, and Python virtual environments and PHP `vendor` folders are marked "Check first" and never selected automatically.
+2. **Review.** Results are sorted by size. Folders unused for 30 days are selected for you; change that to 7, 90 days or anything else. "Last used" is the later of when the folder was last written and when its project was last changed (its files a few levels down, and git's index), so a project you edit every day keeps its `node_modules` even if you installed it months ago. Folders a running program is using are locked, Python virtual environments and PHP `vendor` folders are marked "Check first" and never selected automatically, and the bookmark button on a row keeps that project out for good. Shift-click selects a range.
 3. **Delete.** DevSweep checks every folder again, deletes it, and reports how much free space you actually got back.
+
+The last scan is saved and shown again the next time you open DevSweep, so you can come back to a list without scanning again. Everything is still checked again before it is deleted.
 
 Files are deleted permanently. They don't go to the Recycle Bin or the Trash, because moving 50 GB of `node_modules` there frees nothing.
 
@@ -102,6 +108,20 @@ Files are deleted permanently. They don't go to the Recycle Bin or the Trash, be
   ```bash
   sudo chown -R "$USER": ~/projects/my-app/node_modules
   ```
+
+## Command line
+
+The same rules, checks and keep list are available without the window:
+
+```bash
+devsweep scan ~/code
+```
+
+```bash
+devsweep clean ~/code --older-than 60 --caches --dry-run
+```
+
+`scan` lists what DevSweep found, with a `*` next to what `clean` would delete. `clean` deletes folders unused for `--older-than` days (30 by default) and asks first; add `--yes` to skip the question in a script or a cron job. `--json` prints the result as JSON, `--include-caution` also takes folders marked "Check first", and with no folder it scans your home folder and every drive except the system one. `devsweep --help` lists everything. On Linux the `.deb` and `.rpm` put `devsweep` on your `PATH`.
 
 ## What it removes
 
@@ -121,20 +141,28 @@ Files are deleted permanently. They don't go to the Recycle Bin or the Trash, be
 | Python `.venv`, `venv` | `pyproject.toml`, `requirements.txt`, ... | `pyvenv.cfg` | recreate the venv (marked "Check first") |
 | Python `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.tox` | a Python project file | | the next run |
 | PHP `vendor` | `composer.json` | `autoload.php` | `composer install` (marked "Check first") |
-| Elixir `_build`, `deps`; Swift `.build`; Zig `.zig-cache`; Haskell `.stack-work` | the project file | | the usual build |
+| Python `__pycache__` | a `.py` file | a `.pyc` file | the next import |
+| `.output` (Nuxt 3), `.docusaurus`, `.expo` | the framework's config file | | the next dev or build run |
+| JavaScript `coverage` | `package.json` | `lcov.info`, `coverage-final.json`, ... | the next test run with coverage |
+| Terraform `.terraform` | a `*.tf` file | `providers` or `modules` | `terraform init` |
+| Unity `Library` | `ProjectSettings/ProjectVersion.txt` | `ArtifactDB`, `PackageCache`, ... | opening the project in Unity |
+| Unreal `Intermediate`, `DerivedDataCache`, `Binaries` | a `*.uproject` file | `Intermediate` and `Binaries` need build output | building or opening the project |
+| Elixir `_build`, `deps`; Swift `.build`; Zig `.zig-cache`, `zig-out`; Haskell `.stack-work`; Elm `elm-stuff`; Clojure `.cpcache` | the project file | | the usual build |
 
 The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 
-**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, pip and uv caches, the pnpm store, the Cargo registry and git checkouts, the Gradle, Maven and NuGet caches, the Go build and module caches, Electron, Playwright and Cypress downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
+**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Hugging Face models, Electron, Playwright, Cypress and Puppeteer downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
 
 ## How it avoids breaking things
 
 - **It only takes folders a project owns.** `node_modules` without a `package.json` next to it is ignored. So is a `target` folder next to `Cargo.toml` that holds notes instead of Cargo output.
 - **It stays out of installed programs.** The scanner never enters Program Files, ProgramData, AppData, Windows, `.git`, editor folders (`.vscode`, `.cursor`, `.idea`), toolchain folders (`.rustup`, `.cargo`, `.nvm`), Steam and Epic libraries, or any `resources` folder. Installed Electron apps ship a `node_modules` next to a `package.json` inside `resources`, and those must never be offered. On Linux it also skips `/usr`, `/opt`, `/var`, `/etc` and the other system folders, `~/.config`, `~/.cache`, `~/.local`, Flatpak (`~/.var`) and Snap (`~/snap`) apps, Wine prefixes, and Node version managers and global npm prefixes (`.volta`, `.fnm`, `.asdf`, `.npm-global`), where globally installed tools look just like projects.
 - **It never follows links.** Symlinks and junctions are skipped during the scan and the delete. Deleting a junction inside `node_modules` removes the link and leaves the folder it points to alone.
-- **It locks folders in use.** A folder can't be selected when a program runs from inside it, or when a dev tool (node, cargo, dotnet, java, python and others) has its working folder inside that project. Caches lock while their package manager runs.
+- **It locks folders in use.** A folder can't be selected when a program runs from inside it, or when a dev tool (node, cargo, dotnet, java, python and others) has its working folder inside that project. Caches lock while their package manager installs. DevSweep reads command lines to see npm, pnpm and yarn running inside `node`, Composer inside `php` and Gradle or Maven inside `java`. A dev server started with `pnpm dev` or `npm run` does not lock the caches, because it never touches them.
+- **It never leaves a project half-deleted.** A folder is renamed (to `node_modules.<time>.devsweep-trash`) before anything inside it is deleted, so if deleting stops part way the project simply has no `node_modules`, not a broken one. The next scan offers what was left. Running programs are looked at again every few seconds during a long delete.
 - **It checks again before deleting.** The folder must be in the last scan, its project file must still be there, nothing may be using it, and the path must not be a drive root, your home folder, the Windows folder, a Linux system folder such as `/usr` or `/opt`, or a link.
 - **It is cautious about environments.** Python virtual environments and PHP `vendor` folders are marked "Check first" and never selected automatically. Recreating them can take more than one command.
+- **It respects the keep list.** Kept folders are marked in every scan and refused at delete time, from the window and the command line alike.
 - **It runs as a normal user.** Some folders return "Access is denied", usually because a terminal running as administrator created them. On Windows the report then offers "Restart as administrator", which goes through the UAC prompt and scans again. DevSweep never asks for elevation on its own, and the same rules and checks apply when elevated. On Linux such folders usually hold files owned by root, from `sudo npm install` or a Docker build. DevSweep does not run itself as root; the report shows the `chown` command that gives the folder back to you.
 - **It reports what really changed.** pnpm and Cargo use hard links, so a folder's size can overstate what deleting it frees. The report shows the change in free disk space next to the counted size.
 
@@ -143,9 +171,9 @@ The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 | | DevSweep | [kondo](https://github.com/tbillington/kondo) | [npkill](https://github.com/voidcosmos/npkill) | WizTree, WinDirStat | Storage Sense, Disk Cleanup | `cargo clean`, `npm cache clean` and friends |
 |---|---|---|---|---|---|---|
 | Interface | Desktop GUI | CLI, plus a separate GUI | Terminal UI | Desktop GUI | Windows Settings | Command line |
-| Finds build output across many projects | Yes, 29 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
+| Finds build output across many projects | Yes, 42 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
 | Checks the owning project file | Yes, plus a marker inside for ambiguous names | Yes | No, it matches folder names | No | n/a | n/a |
-| Global package caches | Yes, over 20 locations | No | No | Shows them | No | One tool each |
+| Global package caches | Yes, over 30 locations | No | No | Shows them | No | One tool each |
 | Skips folders a running program uses | Yes | No | No | No | n/a | Some tools refuse while locked |
 | Keeps out of installed apps | Fixed exclusion list | No | Flags them with a warning | No | n/a | n/a |
 | Platforms | Windows, Linux | Windows, macOS, Linux | Anywhere Node.js runs | Windows | Windows | All |
@@ -166,6 +194,8 @@ DevSweep is for the case where you want all of that in one pass, on Windows or L
 - On Linux the in-use check sees only your own processes. A dev server run by another user or inside a container does not lock a folder.
 - On Linux DevSweep cannot restart itself as root. Folders full of root-owned files have to be handed back with `chown` first.
 - Deletion is permanent.
+- On Windows, sizes count hard-linked files once per link, since Windows does not report links cheaply. The free-space change in the report is accurate.
+- On Windows the command line runs from the GUI executable, so `cmd` returns to its prompt before the output finishes. Pipe it (`devsweep scan | more`) to wait. This path is not yet tested on Windows.
 - The rule list covers common toolchains. If yours is missing, add a rule in `src-tauri/src/rules.rs`. Each rule is about ten lines.
 
 ## Development
@@ -208,7 +238,13 @@ The tests build fake projects in the temp folder and check what gets found and d
 cd src-tauri && cargo test
 ```
 
-GitHub Actions runs them on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
+The interface's selection and formatting rules live in `ui/logic.js` and have their own tests:
+
+```bash
+node --test tests/ui
+```
+
+GitHub Actions runs both, plus `cargo clippy -- -D warnings`, on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
 
 ### Build packages
 
@@ -226,7 +262,10 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `src-tauri/src/procs.rs` finds running programs that use a folder
 - `src-tauri/src/clean.rs` deletes, and holds the last-chance path checks
 - `src-tauri/src/main.rs` has the Tauri commands
+- `src-tauri/src/cli.rs` is the command line
+- `src-tauri/src/store.rs` saves the keep list and the last scan, and writes exports
 - `src-tauri/src/tests.rs` has the tests against fake projects
+- `tests/ui` has the tests for `ui/logic.js`
 
 ### Publishing a release
 
@@ -244,7 +283,7 @@ Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbink
 
 - **Missing toolchain?** Add a `ProjectRule` to `PROJECT_RULES` in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs) (about ten lines), or a line to `cache_entries` for a global cache. Add a case to [`src-tauri/src/tests.rs`](src-tauri/src/tests.rs) that builds a fake project and checks the folder is found, and that a lookalike folder without the project file is not.
 - **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
-- Run `cargo test` in `src-tauri` before opening a pull request. CI runs the same tests on Windows and Linux.
+- Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test tests/ui`, before opening a pull request. CI runs the same checks on Windows and Linux.
 
 ## License
 

@@ -86,16 +86,18 @@
           </select>
         </div>
         <button class="btn ghost small" id="select-none" type="button">Clear selection</button>
+        <button class="btn ghost small" id="show-keep" type="button" title="Folders that are never offered">Kept <span class="count" id="keep-count">0</span></button>
+        <button class="btn ghost small" id="export" type="button" title="Save the list as CSV or JSON">Export</button>
       </div>
 
       <table class="items">
         <thead>
           <tr>
             <th class="col-check"><input type="checkbox" id="check-all" aria-label="Select all shown" /></th>
-            <th class="col-size sortable" data-sort="bytes">Size</th>
+            <th class="col-size sortable" data-sort="frees" title="Space that deleting the folder gives back">Size</th>
             <th class="col-folder sortable" data-sort="path">Folder</th>
             <th class="col-eco sortable" data-sort="ecosystem">Type</th>
-            <th class="col-age sortable" data-sort="lastWrite">Last changed</th>
+            <th class="col-age sortable" data-sort="lastUsed" title="The later of when the folder was last written and when its project was last changed">Last used</th>
             <th class="col-safety">How it comes back</th>
             <th class="col-act"><span class="sr">Actions</span></th>
           </tr>
@@ -135,6 +137,18 @@
     </div>
   </dialog>
 
+  <dialog class="modal" id="keep">
+    <form method="dialog">
+      <h2>Kept folders</h2>
+      <p class="modal-lead">DevSweep never offers these folders or anything inside them. Keep a project from its row in the list.</p>
+      <ul class="fail-list keep-list" id="keep-list"></ul>
+      <p class="fine" id="keep-empty">Nothing is kept yet.</p>
+      <div class="modal-actions">
+        <button class="btn primary" value="ok" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="modal" id="report">
     <form method="dialog">
       <h2 id="report-title">Done</h2>
@@ -148,6 +162,7 @@
     </form>
   </dialog>
 
+  <script src="logic.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -7,6 +7,9 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 pub struct Proc {
     pub pid: u32,
     pub name: String,
+    /// What this process counts as for cache locks: its name, plus tools its name hides,
+    /// such as `npm` for `node npm-cli.js` or `gradle` for a Gradle daemon in `java`.
+    pub tools: Vec<String>,
     exe: Option<String>,
     cwd: Option<String>,
 }
@@ -49,11 +52,10 @@ fn stem(name: &str) -> String {
     let name = name.to_lowercase();
     let name = name.trim_end_matches(".exe");
     for tool in ["python", "pythonw", "java", "node", "ruby", "php", "dotnet"] {
-        if let Some(rest) = name.strip_prefix(tool) {
-            if rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-') {
+        if let Some(rest) = name.strip_prefix(tool)
+            && rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-') {
                 return tool.to_string();
             }
-        }
     }
     name.to_string()
 }
@@ -65,7 +67,8 @@ pub fn snapshot() -> Vec<Proc> {
         true,
         ProcessRefreshKind::nothing()
             .with_exe(UpdateKind::Always)
-            .with_cwd(UpdateKind::Always),
+            .with_cwd(UpdateKind::Always)
+            .with_cmd(UpdateKind::Always),
     );
     sys.processes()
         .iter()
@@ -82,9 +85,12 @@ pub fn snapshot() -> Vec<Proc> {
                     .map(|n| n.to_string_lossy().trim_end_matches(" (deleted)").to_string())
                     .unwrap_or_else(|| p.name().to_string_lossy().into_owned())
             };
+            let name = stem(&name);
+            let cmd: Vec<String> = p.cmd().iter().map(|a| a.to_string_lossy().into_owned()).collect();
             Proc {
                 pid: pid.as_u32(),
-                name: stem(&name),
+                tools: script_tools(&name, &cmd),
+                name,
                 exe: p.exe().map(norm),
                 cwd: p.cwd().map(norm),
             }
@@ -92,12 +98,111 @@ pub fn snapshot() -> Vec<Proc> {
         .collect()
 }
 
+/// Package managers and test tools that run as a script under an interpreter. A process
+/// list only shows `node` or `php` for them.
+const SCRIPT_TOOLS: &[&str] = &[
+    "npm", "npx", "pnpm", "pnpx", "yarn", "composer", "pip", "poetry", "pre-commit",
+    "electron-builder", "playwright", "cypress", "puppeteer",
+];
+
+/// Package manager commands that read or write the package caches. Anything else, such as
+/// `pnpm dev` or `npm run build`, only runs the project's own scripts; a dev server started
+/// that way can run for hours and must not lock the caches.
+const CACHE_COMMANDS: &[&str] = &[
+    "install", "i", "ci", "clean-install", "install-test", "it", "add", "update", "up", "upgrade",
+    "remove", "rm", "uninstall", "un", "dedupe", "ddp", "fetch", "import", "prune", "rebuild",
+    "rb", "store", "cache", "dlx", "create", "init", "patch",
+];
+
+/// Package manager options that take a value, as in `pnpm --dir web dev`. The value is not
+/// the command.
+const VALUE_OPTIONS: &[&str] = &["--dir", "-C", "--filter", "-F", "--prefix", "--cwd", "--workspace", "--reporter", "--loglevel"];
+
+/// The command a package manager runs: the first argument from `start` on that is neither an
+/// option nor an option's value.
+fn subcommand(cmd: &[String], start: usize) -> Option<String> {
+    let mut it = cmd.iter().skip(start);
+    while let Some(a) = it.next() {
+        if VALUE_OPTIONS.contains(&a.as_str()) {
+            it.next();
+        } else if !a.starts_with('-') {
+            return Some(a.to_lowercase());
+        }
+    }
+    None
+}
+
+const PACKAGE_MANAGERS: &[&str] = &["npm", "pnpm", "yarn", "bun"];
+
+/// Everything a process counts as when checking which programs use a cache: its own name,
+/// plus tools its command line shows it is running.
+///
+/// * `node .../npm-cli.js`, `node .../pnpm.cjs`, `node .yarn/releases/yarn-4.1.0.cjs`
+/// * `node .../node_modules/@playwright/test/cli.js` (the package name counts)
+/// * `php /usr/bin/composer`, `python -m pip`
+/// * `java ... org.gradle.launcher.daemon.bootstrap.GradleDaemon` and Maven's launcher
+///
+/// npm, pnpm, yarn and bun only count while they run a command from `CACHE_COMMANDS`.
+pub fn script_tools(name: &str, cmd: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = vec![name.to_string()];
+    // Where the package manager's own arguments start, when there is one.
+    let mut pm_args = if PACKAGE_MANAGERS.contains(&name) { Some(1) } else { None };
+    let mut add = |t: &str| {
+        if !out.iter().any(|o| o == t) {
+            out.push(t.to_string());
+        }
+    };
+    match name {
+        "node" | "bun" | "deno" | "php" | "python" | "pythonw" | "ruby" => {
+            // The script is the first argument after the program that is not an option.
+            let Some((at, script)) = cmd.iter().enumerate().skip(1).find(|(_, a)| !a.starts_with('-')) else {
+                return out;
+            };
+            pm_args = Some(at + 1);
+            let script = script.replace('\\', "/").to_lowercase();
+            let file = script.rsplit('/').next().unwrap_or("");
+            let base = file.split('.').next().unwrap_or("");
+            let base = base.trim_end_matches(|c: char| c.is_ascii_digit());
+            for tool in SCRIPT_TOOLS {
+                if base == *tool || base.strip_prefix(tool).is_some_and(|r| r.starts_with('-')) {
+                    add(tool);
+                }
+            }
+            // A script inside a package: node_modules/npm/bin/npm-cli.js, node_modules/@playwright/test/cli.js
+            if let Some((_, rest)) = script.rsplit_once("node_modules/") {
+                let pkg = rest.split('/').next().unwrap_or("").trim_start_matches('@');
+                if let Some(tool) = SCRIPT_TOOLS.iter().find(|t| **t == pkg) {
+                    add(tool);
+                }
+            }
+        }
+        "java" | "javaw" => {
+            let line = cmd.join(" ");
+            if line.contains("org.gradle.") || line.contains("GradleDaemon") || line.contains("GradleWrapperMain") {
+                add("gradle");
+            }
+            if line.contains("org.codehaus.plexus.classworlds") || line.contains("-Dmaven.home") {
+                add("mvn");
+            }
+        }
+        _ => {}
+    }
+    if let Some(start) = pm_args {
+        let sub = subcommand(cmd, start);
+        if sub.is_some_and(|s| !CACHE_COMMANDS.contains(&s.as_str())) {
+            out.retain(|t| !PACKAGE_MANAGERS.contains(&t.as_str()));
+        }
+    }
+    out
+}
+
 /// Running programs that would break if `path` were deleted.
 ///
 /// * any program started from inside `path` (e.g. an app running from target\debug)
 /// * a dev tool whose working folder is inside `project` (e.g. `next dev` in the project)
 /// * any process named in `tools` (e.g. cargo while the cargo cache is cleaned)
-pub fn users_of(path: &Path, project: Option<&Path>, tools: &[&str], procs: &[Proc]) -> Vec<String> {
+pub fn users_of<S: AsRef<str>>(path: &Path, project: Option<&Path>, tools: &[S], procs: &[Proc]) -> Vec<String> {
+    let tools: Vec<&str> = tools.iter().map(AsRef::as_ref).collect();
     let p = norm(path);
     let proj = project.map(norm);
     let mut out: Vec<String> = procs
@@ -109,26 +214,14 @@ pub fn users_of(path: &Path, project: Option<&Path>, tools: &[&str], procs: &[Pr
                     (Some(proj), Some(cwd)) => cwd.starts_with(proj.as_str()),
                     _ => false,
                 };
-            let named = tools.contains(&pr.name.as_str());
+            let named = tools.iter().any(|t| pr.tools.iter().any(|x| x == t));
             exe_inside || cwd_inside || named
         })
-        .map(|pr| format!("{} (PID {})", pr.name, pr.pid))
+        .map(|pr| format!("{} (PID {})", pr.tools.iter().find(|t| **t != pr.name).unwrap_or(&pr.name), pr.pid))
         .collect();
     out.sort();
     out.dedup();
     out
-}
-
-/// Tools that must not run while a cache of this ecosystem is cleaned.
-pub fn cache_tools(ecosystem: &str) -> &'static [&'static str] {
-    match ecosystem {
-        "Rust" => &["cargo"],
-        "Go" => &["go"],
-        ".NET" => &["dotnet"],
-        "Python" => &["uv", "pip"],
-        "Node.js" => &["pnpm", "yarn", "bun"],
-        _ => &[],
-    }
 }
 
 /// Names of build tools and dev servers that are running right now.

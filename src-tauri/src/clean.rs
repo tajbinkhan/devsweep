@@ -1,10 +1,12 @@
 //! Deletes folders. Never follows symlinks or junctions, and refuses paths that are too
 //! close to a drive root or the home folder.
 
+use crate::rules;
 use rayon::prelude::*;
 use std::fs;
 use std::io;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Why a delete failed. `denied` is set when the OS refused access. On Windows running
 /// DevSweep as administrator may fix it; on Linux the files usually belong to root.
@@ -38,16 +40,14 @@ pub fn guard(path: &Path) -> Result<(), String> {
     if named < 2 {
         return Err("Refusing to delete a folder this close to the drive root".into());
     }
-    if let Some(home) = dirs::home_dir() {
-        if same(path, &home) || home.starts_with(path) {
+    if let Some(home) = dirs::home_dir()
+        && (same(path, &home) || home.starts_with(path)) {
             return Err("Refusing to delete the home folder or a folder that contains it".into());
         }
-    }
-    if let Some(win) = std::env::var_os("SystemRoot") {
-        if path.starts_with(Path::new(&win)) {
+    if let Some(win) = std::env::var_os("SystemRoot")
+        && path.starts_with(Path::new(&win)) {
             return Err("Refusing to delete inside the Windows folder".into());
         }
-    }
     #[cfg(unix)]
     if let Some(dir) = SYSTEM_DIRS
         .iter()
@@ -175,11 +175,49 @@ fn remove_entry(path: &Path) -> io::Result<()> {
     let md = fs::symlink_metadata(path)?;
     let link = md.file_type().is_symlink() || is_reparse(&md);
     if !link && md.is_dir() {
-        fs::remove_dir_all(path)
+        remove_tree(path, SPLIT_DEPTH)
     } else if link && is_dir_link(&md) {
         fs::remove_dir(path) // removes the junction or directory symlink, not its target
     } else {
         fs::remove_file(path)
+    }
+}
+
+/// How many folder levels below each top entry are deleted in parallel. Deeper than this,
+/// the standard library's `remove_dir_all` takes over; it never follows links and guards
+/// against a folder being swapped for a link while it runs. Two levels is enough to spread
+/// a pnpm `node_modules/.pnpm/<package>` or a Cargo `target/debug/deps` over every core.
+const SPLIT_DEPTH: u32 = 2;
+
+/// Deletes a real folder and everything in it, sub-folders in parallel down to `depth`.
+fn remove_tree(dir: &Path, depth: u32) -> io::Result<()> {
+    if depth == 0 {
+        return fs::remove_dir_all(dir);
+    }
+    let entries: Vec<_> = fs::read_dir(dir)?.flatten().collect();
+    let first_error = entries
+        .par_iter()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let md = match fs::symlink_metadata(&path) {
+                Ok(md) => md,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return None,
+                Err(e) => return Some(e),
+            };
+            let link = md.file_type().is_symlink() || is_reparse(&md);
+            let result = if !link && md.is_dir() {
+                remove_tree(&path, depth - 1)
+            } else if link && is_dir_link(&md) {
+                fs::remove_dir(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+            result.err().filter(|e| e.kind() != io::ErrorKind::NotFound)
+        })
+        .reduce_with(|a, _| a);
+    match first_error {
+        Some(e) => Err(e),
+        None => fs::remove_dir(dir),
     }
 }
 
@@ -238,17 +276,43 @@ fn summarize(errors: Vec<(String, bool)>) -> Result<(), Failure> {
     Err(Failure { message, denied })
 }
 
+/// The name a folder gets while it is being deleted: `node_modules` becomes
+/// `node_modules.1731900000.devsweep-trash` in the same parent.
+fn trash_path(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_string_lossy();
+    if rules::is_trash_name(&name) {
+        return None; // already moved aside by an earlier, unfinished delete
+    }
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    Some(path.with_file_name(format!("{name}.{secs}{}", rules::TRASH_SUFFIX)))
+}
+
+/// Deletes a build folder. The folder is first renamed in place, which is instant, so the
+/// project never sees a half-deleted `node_modules` or `target`: if deleting stops part way,
+/// what is left sits under the `.devsweep-trash` name and the next scan offers it again.
+/// When the rename fails (a file inside is open on Windows, for one), it deletes in place.
 pub fn remove_dir(path: &Path) -> Result<(), Failure> {
     guard(path)?;
-    let mut errors = remove_children(path);
-    if errors.is_empty() {
-        if let Err(e) = fs::remove_dir(path) {
-            if path.exists() {
-                errors.push((format!("{}: {e}", path.display()), denied(&e)));
+    let target = match trash_path(path) {
+        Some(t) if !t.exists() && fs::rename(path, &t).is_ok() => t,
+        _ => path.to_path_buf(),
+    };
+    let mut errors = remove_children(&target);
+    if errors.is_empty()
+        && let Err(e) = fs::remove_dir(&target)
+            && target.exists() {
+                errors.push((format!("{}: {e}", target.display()), denied(&e)));
             }
+    let moved = target != path;
+    summarize(errors).map_err(|mut f| {
+        if moved {
+            f.message.push_str(&format!(
+                ". The rest was moved to {} and is offered again after the next scan.",
+                target.display()
+            ));
         }
-    }
-    summarize(errors)
+        f
+    })
 }
 
 pub fn remove_contents(path: &Path) -> Result<(), Failure> {
