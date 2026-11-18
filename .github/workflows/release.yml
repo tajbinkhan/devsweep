@@ -75,7 +75,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # Not bash: on Windows, Git Bash enables the backup and restore privileges for what it
+      # starts, which lets deletes ignore the deny rules the access-denied test depends on.
       - name: Run tests
+        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
         working-directory: src-tauri
         run: cargo test
 
