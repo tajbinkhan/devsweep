@@ -28,9 +28,11 @@ jobs:
         include:
           - name: windows
             os: windows-latest
+            test-shell: pwsh
           # The oldest supported Ubuntu, so the .deb and AppImage run on older glibc too.
           - name: linux
             os: ubuntu-22.04
+            test-shell: bash
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -78,7 +80,7 @@ jobs:
       # Not bash: on Windows, Git Bash enables the backup and restore privileges for what it
       # starts, which lets deletes ignore the deny rules the access-denied test depends on.
       - name: Run tests
-        shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+        shell: ${{ matrix.test-shell }}
         working-directory: src-tauri
         run: cargo test
 
