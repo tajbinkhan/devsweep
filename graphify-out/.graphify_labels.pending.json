@@ -1,0 +1,10 @@
+{
+  "2": "Project folder ownership rule (project file next to it, marker inside)",
+  "9": "procs.rs",
+  "11": "cli.rs",
+  "21": "logic.js",
+  "22": "DevSweep",
+  "23": "Step 02 Review (unused 30 days, locked in use, Check first)",
+  "24": "Step 03 Delete (still owned and unused, no links, real space freed)",
+  "25": "Global package caches cleaning"
+}
