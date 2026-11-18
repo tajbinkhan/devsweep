@@ -6,6 +6,9 @@ name: Release
 #
 # Running the workflow by hand builds everything as workflow artifacts without publishing,
 # which is useful to try a build before releasing it.
+#
+# Only the publish job can change the release. The build job runs third-party actions and
+# project dependencies, so it gets a read-only token and hands its files over as artifacts.
 
 on:
   release:
@@ -13,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.event.release.tag_name || github.ref }}
@@ -69,9 +72,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Third-party actions are pinned to commits because tags and branches can be moved.
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
 
@@ -107,16 +113,31 @@ jobs:
           cp src-tauri/target/release/bundle/rpm/*.rpm dist/
           cp src-tauri/target/release/bundle/appimage/*.AppImage dist/
 
-      - name: Attach downloads to the release
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
-
       - name: Keep downloads as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DevSweep-${{ matrix.name }}-${{ steps.version.outputs.version }}
           path: dist/*
           if-no-files-found: error
+
+  publish:
+    name: Publish downloads
+    # Runs only after every platform has built, so a release never gets a partial set of files.
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch the built downloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DevSweep-*
+          path: dist
+          merge-multiple: true
+
+      - name: Attach downloads to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
