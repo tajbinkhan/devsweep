@@ -4,19 +4,22 @@ const dialog = window.__TAURI__.dialog;
 const opener = window.__TAURI__.opener;
 
 const $ = (id) => document.getElementById(id);
-const DAY = 86400;
+const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf } = window.DevSweepLogic;
 
 const state = {
   roots: [],
   items: [],
   selected: new Set(),
   tab: "project",
-  sort: { key: "bytes", dir: "desc" },
+  sort: { key: "frees", dir: "desc" },
   query: "",
   scanning: false,
   elevated: false,
   canElevate: true,
   platform: "windows",
+  keep: [],
+  /** Position in the visible list of the last checkbox clicked, for shift-click ranges. */
+  anchor: null,
 };
 
 /* Platform wording. The backend reports the OS in app_info. */
@@ -34,35 +37,7 @@ function applyPlatformText() {
   $("confirm-fine").textContent = "Files are deleted permanently. They do not go to the Trash.";
 }
 
-/* Formatting */
-
-function fmtBytes(n) {
-  if (n < 1024) return `${n} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  // 99.96 rounds to "100.0"; switch to whole numbers once the rounded value reaches 100.
-  return `${v >= 99.95 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
-
-function fmtAge(unixSecs) {
-  if (!unixSecs) return "empty";
-  const days = Math.floor((Date.now() / 1000 - unixSecs) / DAY);
-  if (days < 1) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days} days ago`;
-  if (days < 365) {
-    const m = Math.floor(days / 30);
-    return `${m} month${m === 1 ? "" : "s"} ago`;
-  }
-  const y = (days / 365).toFixed(1).replace(/\.0$/, "");
-  return `${y} year${y === "1" ? "" : "s"} ago`;
-}
-
-function ageDays(item) {
-  return item.lastWrite ? (Date.now() / 1000 - item.lastWrite) / DAY : Infinity;
-}
+/* Formatting lives in logic.js. */
 
 const SAFETY = {
   safe: { label: "Rebuilds on its own", cls: "safe" },
@@ -180,6 +155,7 @@ async function runScan() {
     const res = await invoke("scan", { roots: state.roots, includeCaches: $("include-caches").checked });
     state.items = res.items;
     state.selected.clear();
+    state.anchor = null;
     selectUnused(30, "project", true);
     const notes = [];
     if (res.cancelled) notes.push("Scan was cancelled, so the list is incomplete.");
@@ -187,15 +163,19 @@ async function runScan() {
     const busy = res.runningTools.filter((t) => t !== "rust-analyzer");
     if (busy.length) notes.push(`Running now: ${res.runningTools.join(", ")}. Folders they use are locked.`);
     showNotice(notes.join(" "));
-    $("empty").hidden = true;
-    $("table-wrap").hidden = false;
-    $("footer").hidden = false;
-    render();
+    showResults();
   } catch (err) {
     showNotice(String(err));
   } finally {
     showProgress(false);
   }
+}
+
+function showResults() {
+  $("empty").hidden = true;
+  $("table-wrap").hidden = false;
+  $("footer").hidden = false;
+  render();
 }
 
 function showNotice(text) {
@@ -205,15 +185,9 @@ function showNotice(text) {
 
 /* Selection */
 
-function selectable(item) {
-  return item.inUseBy.length === 0;
-}
-
 function selectUnused(days, tab = state.tab, quiet = false) {
   for (const it of state.items) {
-    if (it.group !== tab) continue;
-    if (!selectable(it) || it.safety === "caution") continue;
-    if (days === 0 || ageDays(it) >= days) state.selected.add(it.id);
+    if (picksUnused(it, days, tab)) state.selected.add(it.id);
   }
   if (!quiet) render();
 }
@@ -233,18 +207,40 @@ $("check-all").addEventListener("change", (e) => {
   render();
 });
 
-$("rows").addEventListener("change", (e) => {
+// Ticking one box only touches that row and the totals, so long lists stay quick.
+// Shift-click ticks or clears every row between the last box clicked and this one.
+$("rows").addEventListener("click", (e) => {
   const cb = e.target.closest("input[data-id]");
   if (!cb) return;
+  const rows = visibleItems();
+  const at = rows.findIndex((r) => r.id === cb.dataset.id);
+  if (e.shiftKey && state.anchor !== null && state.anchor < rows.length) {
+    for (const id of rangeIds(rows, state.anchor, at)) {
+      if (cb.checked) state.selected.add(id);
+      else state.selected.delete(id);
+    }
+    state.anchor = at;
+    render();
+    return;
+  }
+  state.anchor = at;
   if (cb.checked) state.selected.add(cb.dataset.id);
   else state.selected.delete(cb.dataset.id);
-  render();
+  cb.closest("tr").classList.toggle("selected", cb.checked);
+  renderSelection(rows);
 });
 
 $("rows").addEventListener("click", async (e) => {
-  const btn = e.target.closest("[data-reveal]");
-  if (btn) {
-    try { await opener.revealItemInDir(btn.dataset.reveal); } catch (err) { showNotice(String(err)); }
+  const reveal = e.target.closest("[data-reveal]");
+  if (reveal) {
+    try { await opener.revealItemInDir(reveal.dataset.reveal); } catch (err) { showNotice(String(err)); }
+    return;
+  }
+  const keep = e.target.closest("[data-keep]");
+  if (keep) {
+    const path = keep.dataset.keep;
+    const next = state.keep.includes(path) ? state.keep.filter((k) => k !== path) : [...state.keep, path];
+    await saveKeep(next);
   }
 });
 
@@ -288,34 +284,113 @@ function visibleItems() {
   return list;
 }
 
+/* Keep list */
+
+/** The folder a row's keep button keeps: the whole project for build folders. */
+const keepPath = (it) => it.project || it.path;
+
+async function saveKeep(paths) {
+  try {
+    const keptIds = new Set(await invoke("set_keep", { paths }));
+    state.keep = [...new Set(paths)].sort();
+    for (const it of state.items) {
+      it.kept = keptIds.has(it.id);
+      if (it.kept) state.selected.delete(it.id);
+    }
+  } catch (err) {
+    showNotice(String(err));
+  }
+  renderKeep();
+  render();
+}
+
+function renderKeep() {
+  $("keep-count").textContent = state.keep.length;
+  $("keep-empty").hidden = state.keep.length > 0;
+  $("keep-list").innerHTML = state.keep
+    .map((k) => `<li><span class="f-path">${esc(k)}</span>
+      <button class="btn ghost small" type="button" data-unkeep="${esc(k)}">Stop keeping</button></li>`)
+    .join("");
+}
+
+$("show-keep").addEventListener("click", () => {
+  renderKeep();
+  $("keep").showModal();
+});
+$("keep-list").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-unkeep]");
+  if (btn) saveKeep(state.keep.filter((k) => k !== btn.dataset.unkeep));
+});
+
+/* Export */
+
+$("export").addEventListener("click", async () => {
+  const path = await dialog.save({
+    title: "Export the list",
+    defaultPath: "devsweep-scan.csv",
+    filters: [
+      { name: "CSV", extensions: ["csv"] },
+      { name: "JSON", extensions: ["json"] },
+    ],
+  });
+  if (!path) return;
+  try {
+    const n = await invoke("export", { path });
+    showNotice(`Saved ${n} folder${n === 1 ? "" : "s"} to ${path}.`);
+  } catch (err) {
+    showNotice(String(err));
+  }
+});
+
 /* Rendering */
 
 const REVEAL_ICON = `<svg viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H8L6.5 3.5h-4a1 1 0 0 0-1 1z"/></svg>`;
+const KEEP_ICON = `<svg viewBox="0 0 16 16"><path d="M4 2.5h8v11l-4-3-4 3z"/></svg>`;
+
+/** Tooltip for the age column: both dates that go into "last used". */
+function ageTitle(it) {
+  const parts = [];
+  if (it.projectActive) parts.push(`Project last changed ${fmtAge(it.projectActive)}`);
+  parts.push(`Folder last written ${fmtAge(it.lastWrite)}`);
+  return parts.join(". ");
+}
 
 function render() {
   const rows = visibleItems();
-  const max = Math.max(1, ...rows.map((r) => r.bytes));
+  const max = Math.max(1, maxOf(rows.map((r) => r.frees)));
 
   $("rows").innerHTML = rows
     .map((it) => {
       const locked = !selectable(it);
       const sel = state.selected.has(it.id) && !locked;
+      const kept = state.keep.includes(keepPath(it));
       const s = SAFETY[it.safety];
       const days = ageDays(it);
       const name = it.group === "project"
         ? `<span>${esc(it.label)}</span><span class="proj">${esc(projectName(it))}</span>`
         : `<span>${esc(it.label)}</span>`;
-      const badge = locked
+      const badge = it.kept
+        ? `<span class="badge kept" title="On the keep list">Kept</span>`
+        : it.inUseBy.length
         ? `<span class="badge locked" title="${esc(it.inUseBy.join(", "))}">In use by ${esc(it.inUseBy[0].split(" ")[0])}${it.inUseBy.length > 1 ? ` +${it.inUseBy.length - 1}` : ""}</span>`
         : `<span class="badge ${s.cls}" title="${esc(it.note || "")}">${s.label}</span>`;
+      // Hard links can make a folder look bigger than what deleting it gives back.
+      const shared = it.bytes > it.frees * 1.1 && it.bytes - it.frees > 1024 * 1024;
+      const sizeTitle = shared
+        ? `The files add up to ${fmtBytes(it.bytes)}, but deleting the folder frees ${fmtBytes(it.frees)}. Some files are hard links: counted once per link, or shared with files outside this folder that stay on disk.`
+        : `${it.files.toLocaleString()} files`;
       return `<tr class="${sel ? "selected" : ""} ${locked ? "locked" : ""}">
         <td class="col-check"><input type="checkbox" data-id="${esc(it.id)}" ${sel ? "checked" : ""} ${locked ? "disabled" : ""} aria-label="Select ${esc(it.path)}"></td>
-        <td><div class="size">${fmtBytes(it.bytes)}</div><div class="size-bar"><div style="width:${((it.bytes / max) * 100).toFixed(1)}%"></div></div></td>
+        <td title="${esc(sizeTitle)}"><div class="size">${fmtBytes(it.frees)}${shared ? `<span class="size-of">of ${fmtBytes(it.bytes)}</span>` : ""}</div><div class="size-bar"><div style="width:${((it.frees / max) * 100).toFixed(1)}%"></div></div></td>
         <td><div class="folder-name">${name}</div><div class="folder-path" title="${esc(it.path)}">${esc(it.path)}</div></td>
         <td class="eco">${esc(it.ecosystem)}</td>
-        <td class="age ${days < 7 ? "recent" : ""}">${fmtAge(it.lastWrite)}</td>
+        <td class="age ${days < 7 ? "recent" : ""}" title="${esc(ageTitle(it))}">${fmtAge(it.lastUsed)}</td>
         <td>${badge}<span class="restore" title="${esc(it.restore)}">${esc(it.restore)}</span></td>
-        <td><button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in ${fileManager()}" aria-label="Show ${esc(it.path)} in ${fileManager()}">${REVEAL_ICON}</button></td>
+        <td><div class="row-actions">
+          <button class="icon-btn ${kept ? "on" : ""}" type="button" data-keep="${esc(keepPath(it))}" aria-pressed="${kept}"
+            title="${kept ? "Stop keeping" : "Keep: never offer"} ${esc(keepPath(it))}" aria-label="${kept ? "Stop keeping" : "Keep"} ${esc(keepPath(it))}">${KEEP_ICON}</button>
+          <button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in ${fileManager()}" aria-label="Show ${esc(it.path)} in ${fileManager()}">${REVEAL_ICON}</button>
+        </div></td>
       </tr>`;
     })
     .join("");
@@ -323,23 +398,27 @@ function render() {
 
   for (const g of ["project", "cache"]) {
     const list = state.items.filter((i) => i.group === g);
-    $(`count-${g}`).textContent = list.length ? `${list.length} · ${fmtBytes(list.reduce((a, b) => a + b.bytes, 0))}` : "0";
+    $(`count-${g}`).textContent = list.length ? `${list.length} · ${fmtBytes(list.reduce((a, b) => a + b.frees, 0))}` : "0";
   }
 
+  document.querySelectorAll("th.sortable").forEach((th) => {
+    if (th.dataset.sort === state.sort.key) th.dataset.dir = state.sort.dir;
+    else delete th.dataset.dir;
+  });
+  renderSelection(rows);
+}
+
+/** The select-all box and the footer totals. */
+function renderSelection(rows) {
   const pickable = rows.filter(selectable);
   const all = $("check-all");
   const n = pickable.filter((r) => state.selected.has(r.id)).length;
   all.checked = pickable.length > 0 && n === pickable.length;
   all.indeterminate = n > 0 && n < pickable.length;
 
-  document.querySelectorAll("th.sortable").forEach((th) => {
-    if (th.dataset.sort === state.sort.key) th.dataset.dir = state.sort.dir;
-    else delete th.dataset.dir;
-  });
-
   const chosen = selectedItems();
   $("sel-count").textContent = chosen.length;
-  $("sel-size").textContent = fmtBytes(chosen.reduce((a, b) => a + b.bytes, 0));
+  $("sel-size").textContent = fmtBytes(chosen.reduce((a, b) => a + b.frees, 0));
   $("clean").disabled = chosen.length === 0;
 }
 
@@ -358,7 +437,7 @@ function selectedItems() {
 $("clean").addEventListener("click", () => {
   const chosen = selectedItems();
   if (!chosen.length) return;
-  const total = chosen.reduce((a, b) => a + b.bytes, 0);
+  const total = chosen.reduce((a, b) => a + b.frees, 0);
   $("confirm-title").textContent = `Delete ${chosen.length} folder${chosen.length === 1 ? "" : "s"}?`;
   $("confirm-lead").textContent = `This frees up to ${fmtBytes(total)}. Here is how each kind comes back:`;
 
@@ -367,7 +446,7 @@ $("clean").addEventListener("click", () => {
     const k = `${it.ecosystem}|${it.label}`;
     const g = groups.get(k) || { it, n: 0, bytes: 0 };
     g.n++;
-    g.bytes += it.bytes;
+    g.bytes += it.frees;
     groups.set(k, g);
   }
   $("confirm-list").innerHTML = [...groups.values()]
@@ -436,7 +515,7 @@ function showReport(report, error) {
   const measured = Math.max(0, report.measuredBytes);
   let lead = `Deleted ${ok.length} folder${ok.length === 1 ? "" : "s"}. Free space went up by ${fmtBytes(measured)}.`;
   if (report.countedBytes > measured * 1.15 && report.countedBytes - measured > 50 * 1024 * 1024) {
-    lead += ` That is less than the ${fmtBytes(report.countedBytes)} the folders added up to, because some files were shared with other folders (pnpm and Cargo use hard links).`;
+    lead += ` That is less than the ${fmtBytes(report.countedBytes)} expected, because some files were shared with other folders through hard links, or other programs wrote to the drive meanwhile.`;
   }
   if (report.cancelled) lead += " Stopped early on request.";
   if (failed.length) lead += ` ${failed.length} could not be deleted:`;
@@ -486,7 +565,18 @@ $("restart-admin").addEventListener("click", async () => {
   state.elevated = info.elevated;
   state.canElevate = info.canElevate;
   state.platform = info.platform;
+  state.keep = await invoke("get_keep");
+  renderKeep();
   applyPlatformText();
   $("admin-badge").hidden = !info.elevated;
-  if (info.autoScan) runScan();
+  if (info.autoScan) return runScan();
+
+  // Show the last finished scan right away. Nothing is selected until the user asks, since
+  // sizes and ages may have changed; everything is checked again before deleting anyway.
+  const saved = await invoke("last_scan");
+  if (saved && saved.items.length && !state.scanning) {
+    state.items = saved.items;
+    showNotice(`Showing the scan from ${fmtAge(saved.when)}. Scan again for current sizes. Everything is checked again before it is deleted.`);
+    showResults();
+  }
 })();

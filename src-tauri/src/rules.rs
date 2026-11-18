@@ -5,10 +5,10 @@
 //! check for a file that the build tool writes inside the folder, so an unrelated folder
 //! that happens to be called `build` or `target` is left alone.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Safety {
     /// The next normal build or run recreates it.
@@ -337,6 +337,137 @@ pub const PROJECT_RULES: &[ProjectRule] = &[
         note: None,
     },
     ProjectRule {
+        id: "nitro_output",
+        dir: ".output",
+        ecosystem: "Nuxt",
+        siblings: &["nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs", "nitro.config.ts", "nitro.config.js"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "nuxt build",
+        note: None,
+    },
+    ProjectRule {
+        id: "docusaurus",
+        dir: ".docusaurus",
+        ecosystem: "Docusaurus",
+        siblings: &["docusaurus.config.js", "docusaurus.config.ts", "docusaurus.config.mjs"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "docusaurus start or docusaurus build",
+        note: None,
+    },
+    ProjectRule {
+        id: "expo",
+        dir: ".expo",
+        ecosystem: "Expo",
+        siblings: &["app.json", "app.config.js", "app.config.ts"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "expo start",
+        note: None,
+    },
+    ProjectRule {
+        id: "js_coverage",
+        dir: "coverage",
+        ecosystem: "Node.js",
+        siblings: JS,
+        inside: &["lcov.info", "coverage-final.json", "lcov-report", "clover.xml"],
+        safety: Safety::Safe,
+        restore: "run the tests with coverage again",
+        note: None,
+    },
+    ProjectRule {
+        id: "pycache",
+        dir: "__pycache__",
+        ecosystem: "Python",
+        siblings: &["*.py"],
+        inside: &["*.pyc"],
+        safety: Safety::Safe,
+        restore: "python writes it again on the next import",
+        note: None,
+    },
+    ProjectRule {
+        id: "zig_out",
+        dir: "zig-out",
+        ecosystem: "Zig",
+        siblings: &["build.zig"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "zig build",
+        note: None,
+    },
+    ProjectRule {
+        id: "elm_stuff",
+        dir: "elm-stuff",
+        ecosystem: "Elm",
+        siblings: &["elm.json"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "elm make",
+        note: None,
+    },
+    ProjectRule {
+        id: "clojure_cpcache",
+        dir: ".cpcache",
+        ecosystem: "Clojure",
+        siblings: &["deps.edn"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "clojure (the next run works out the classpath again)",
+        note: None,
+    },
+    ProjectRule {
+        id: "terraform",
+        dir: ".terraform",
+        ecosystem: "Terraform",
+        siblings: &["*.tf"],
+        inside: &["providers", "modules"],
+        safety: Safety::Reinstall,
+        restore: "terraform init, needs network",
+        note: None,
+    },
+    // Game engines. Their caches are often the largest folders on a game developer's disk.
+    ProjectRule {
+        id: "unity_library",
+        dir: "Library",
+        ecosystem: "Unity",
+        siblings: &["ProjectSettings/ProjectVersion.txt"],
+        inside: &["ArtifactDB", "SourceAssetDB", "PackageCache", "Artifacts"],
+        safety: Safety::Safe,
+        restore: "open the project in Unity (the first import is slow)",
+        note: Some("Close the project in Unity first."),
+    },
+    ProjectRule {
+        id: "unreal_intermediate",
+        dir: "Intermediate",
+        ecosystem: "Unreal",
+        siblings: &["*.uproject"],
+        inside: &["Build", "ProjectFiles", "Config", "ShaderAutogen"],
+        safety: Safety::Safe,
+        restore: "build or open the project",
+        note: None,
+    },
+    ProjectRule {
+        id: "unreal_ddc",
+        dir: "DerivedDataCache",
+        ecosystem: "Unreal",
+        siblings: &["*.uproject"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "open the project (shaders compile again, which is slow)",
+        note: None,
+    },
+    ProjectRule {
+        id: "unreal_binaries",
+        dir: "Binaries",
+        ecosystem: "Unreal",
+        siblings: &["*.uproject"],
+        inside: &["Win64", "Linux", "Mac"],
+        safety: Safety::Safe,
+        restore: "build the project",
+        note: None,
+    },
+    ProjectRule {
         id: "stack_work",
         dir: ".stack-work",
         ecosystem: "Haskell",
@@ -459,10 +590,33 @@ fn has_entry(dir: &Path, pattern: &str) -> bool {
     dir.join(pattern).exists()
 }
 
+/// Ending given to a folder that DevSweep moves aside right before deleting it. Such a
+/// folder only exists when the delete stopped part way, and it is offered again.
+pub const TRASH_SUFFIX: &str = ".devsweep-trash";
+
+/// A build folder that DevSweep moved aside and could not finish deleting.
+pub static TRASH_RULE: ProjectRule = ProjectRule {
+    id: "devsweep_trash",
+    dir: "Unfinished delete",
+    ecosystem: "DevSweep",
+    siblings: &[],
+    inside: &[],
+    safety: Safety::Safe,
+    restore: "Nothing to restore. The project no longer uses it.",
+    note: Some("What was left of a folder DevSweep started deleting."),
+};
+
+pub fn is_trash_name(name: &str) -> bool {
+    name.len() > TRASH_SUFFIX.len() && name.to_ascii_lowercase().ends_with(TRASH_SUFFIX)
+}
+
 /// Returns the rule that owns this folder, if any.
 pub fn match_project(path: &Path) -> Option<&'static ProjectRule> {
     let name = path.file_name()?.to_str()?;
     let parent = path.parent()?;
+    if is_trash_name(name) {
+        return Some(&TRASH_RULE);
+    }
     PROJECT_RULES.iter().find(|r| {
         r.dir.eq_ignore_ascii_case(name)
             && r.siblings.iter().any(|s| has_entry(parent, s))
@@ -472,7 +626,7 @@ pub fn match_project(path: &Path) -> Option<&'static ProjectRule> {
 
 /// Cheap check used while walking: could this folder name match any rule?
 pub fn is_candidate_name(name: &str) -> bool {
-    PROJECT_RULES.iter().any(|r| r.dir.eq_ignore_ascii_case(name))
+    is_trash_name(name) || PROJECT_RULES.iter().any(|r| r.dir.eq_ignore_ascii_case(name))
 }
 
 /// Global package caches. Only entries that exist on this machine are shown.
@@ -492,7 +646,13 @@ pub struct CacheEntry {
     pub restore: &'static str,
     pub note: Option<&'static str>,
     pub action: CacheAction,
+    /// Programs that must not run while this cache is cleaned.
+    pub tools: &'static [&'static str],
 }
+
+/// One row of the cache table: label, ecosystem, path, safety, how it comes back, note,
+/// how to clean it, and the programs that must not be running while it is cleaned.
+type Row = (&'static str, &'static str, PathBuf, Safety, &'static str, Option<&'static str>, CacheAction, &'static [&'static str]);
 
 pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let home = dirs::home_dir().unwrap_or_default();
@@ -500,48 +660,69 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     // (XDG_CACHE_HOME) and ~/.local/share (XDG_DATA_HOME), and some tools use a dot folder.
     let local = dirs::data_local_dir().unwrap_or_else(|| home.join("AppData").join("Local"));
     let cache = dirs::cache_dir().unwrap_or_else(|| local.clone());
+    // Some cross-platform tools use ~/.cache on every OS, Windows included.
+    let dot_cache = home.join(".cache");
     let win = cfg!(windows);
     let pick = |windows: PathBuf, other: PathBuf| if win { windows } else { other };
+    let env = |var: &str| std::env::var_os(var).map(PathBuf::from);
 
-    let cargo_home = std::env::var_os("CARGO_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".cargo"));
-    let go_cache = std::env::var_os("GOCACHE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| cache.join("go-build"));
-    let go_mod = std::env::var_os("GOMODCACHE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join("go").join("pkg").join("mod"));
+    let cargo_home = env("CARGO_HOME").unwrap_or_else(|| home.join(".cargo"));
+    let go_cache = env("GOCACHE").unwrap_or_else(|| cache.join("go-build"));
+    let go_mod = env("GOMODCACHE").unwrap_or_else(|| home.join("go").join("pkg").join("mod"));
+    let hf_hub = env("HF_HUB_CACHE")
+        .or_else(|| env("HF_HOME").map(|h| h.join("hub")))
+        .unwrap_or_else(|| dot_cache.join("huggingface").join("hub"));
+    let poetry = pick(local.join("pypoetry").join("Cache"), cache.join("pypoetry"));
+    let deno = env("DENO_DIR").unwrap_or_else(|| pick(local.join("deno"), cache.join("deno")));
+
+    const NODE: &[&str] = &["npm", "npx", "pnpm", "yarn", "bun"];
+    const CARGO: &[&str] = &["cargo"];
+    const PY: &[&str] = &["pip", "uv", "poetry"];
+    const GRADLE: &[&str] = &["gradle"];
+    const NUGET: &[&str] = &["dotnet", "msbuild", "nuget"];
+    const GO: &[&str] = &["go"];
+    const ELECTRON: &[&str] = &["electron", "electron-builder"];
+    const NONE: &[&str] = &[];
 
     use CacheAction::*;
     use Safety::*;
     let pnpm_note = Some("Uses pnpm store prune. Freed space is often less than the store size.");
-    let mut list: Vec<(&str, &str, PathBuf, Safety, &str, Option<&str>, CacheAction)> = vec![
-        ("npm cache", "Node.js", pick(local.join("npm-cache"), home.join(".npm").join("_cacache")), Safe, "Downloaded again by npm when needed", None, RemoveContents),
-        ("Yarn cache", "Node.js", pick(local.join("Yarn").join("Cache"), cache.join("yarn")), Safe, "Downloaded again by yarn when needed", None, RemoveContents),
-        ("Yarn Berry cache", "Node.js", home.join(".yarn").join("berry").join("cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents),
-        ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents),
-        ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents),
-        ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents),
-        ("pnpm store", "Node.js", local.join("pnpm").join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune),
-        ("Cargo registry sources", "Rust", cargo_home.join("registry").join("src"), Safe, "Unpacked again from the local registry cache by cargo", None, RemoveContents),
-        ("Cargo registry downloads", "Rust", cargo_home.join("registry").join("cache"), Reinstall, "Downloaded again by cargo, needs network", None, RemoveContents),
-        ("Cargo git checkouts", "Rust", cargo_home.join("git").join("checkouts"), Safe, "Checked out again by cargo", None, RemoveContents),
-        ("pip cache", "Python", pick(local.join("pip").join("cache"), cache.join("pip")), Safe, "Downloaded again by pip when needed", None, RemoveContents),
-        ("uv cache", "Python", pick(local.join("uv").join("cache"), cache.join("uv")), Safe, "Downloaded again by uv when needed", None, RemoveContents),
-        ("Gradle caches", "Gradle", home.join(".gradle").join("caches"), Reinstall, "Downloaded again by Gradle, needs network", None, RemoveContents),
-        ("Gradle wrapper downloads", "Gradle", home.join(".gradle").join("wrapper").join("dists"), Reinstall, "Downloaded again by ./gradlew", None, RemoveContents),
-        ("Maven repository", "Maven", home.join(".m2").join("repository"), Reinstall, "Downloaded again by mvn, needs network", Some("Offline builds fail until dependencies are downloaded again."), RemoveContents),
-        ("NuGet packages", ".NET", home.join(".nuget").join("packages"), Reinstall, "Restored by dotnet restore, needs network", None, RemoveContents),
-        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("v3-cache"), Safe, "Downloaded again when needed", None, RemoveContents),
-        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("http-cache"), Safe, "Downloaded again when needed", None, RemoveContents),
-        ("Go build cache", "Go", go_cache, Safe, "Rebuilt by go build", None, RemoveContents),
-        ("Go module cache", "Go", go_mod, Reinstall, "Downloaded again by go, needs network", None, RemoveContents),
-        ("Electron downloads", "Electron", pick(local.join("electron").join("Cache"), cache.join("electron")), Safe, "Downloaded again when needed", None, RemoveContents),
-        ("electron-builder cache", "Electron", pick(local.join("electron-builder").join("Cache"), cache.join("electron-builder")), Safe, "Downloaded again when packaging", None, RemoveContents),
-        ("Playwright browsers", "Testing", pick(local.join("ms-playwright"), cache.join("ms-playwright")), Reinstall, "npx playwright install", Some("Playwright tests fail until browsers are installed again."), RemoveContents),
-        ("Cypress binaries", "Testing", pick(local.join("Cypress").join("Cache"), cache.join("Cypress")), Reinstall, "npx cypress install", None, RemoveContents),
-        ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents),
+    let mut list: Vec<Row> = vec![
+        ("npm cache", "Node.js", pick(local.join("npm-cache"), home.join(".npm").join("_cacache")), Safe, "Downloaded again by npm when needed", None, RemoveContents, NODE),
+        ("Yarn cache", "Node.js", pick(local.join("Yarn").join("Cache"), cache.join("yarn")), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE),
+        ("Yarn Berry cache", "Node.js", home.join(".yarn").join("berry").join("cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE),
+        ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents, NODE),
+        ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
+        ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
+        ("pnpm store", "Node.js", local.join("pnpm").join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE),
+        ("Deno cache", "Deno", deno, Safe, "Downloaded again by deno when needed", None, RemoveContents, &["deno"]),
+        ("Cargo registry sources", "Rust", cargo_home.join("registry").join("src"), Safe, "Unpacked again from the local registry cache by cargo", None, RemoveContents, CARGO),
+        ("Cargo registry downloads", "Rust", cargo_home.join("registry").join("cache"), Reinstall, "Downloaded again by cargo, needs network", None, RemoveContents, CARGO),
+        ("Cargo git checkouts", "Rust", cargo_home.join("git").join("checkouts"), Safe, "Checked out again by cargo", None, RemoveContents, CARGO),
+        ("sccache", "Rust", pick(local.join("Mozilla").join("sccache").join("cache"), cache.join("sccache")), Safe, "Filled again by the next builds", None, RemoveContents, &["sccache", "cargo"]),
+        ("ccache", "C and C++", pick(local.join("ccache"), cache.join("ccache")), Safe, "Filled again by the next builds", None, RemoveContents, &["ccache"]),
+        ("pip cache", "Python", pick(local.join("pip").join("cache"), cache.join("pip")), Safe, "Downloaded again by pip when needed", None, RemoveContents, PY),
+        ("uv cache", "Python", pick(local.join("uv").join("cache"), cache.join("uv")), Safe, "Downloaded again by uv when needed", None, RemoveContents, PY),
+        // Poetry keeps its virtual environments next to these two, so only these are offered.
+        ("Poetry cache", "Python", poetry.join("cache"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
+        ("Poetry artifacts", "Python", poetry.join("artifacts"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
+        ("pre-commit environments", "Python", dot_cache.join("pre-commit"), Reinstall, "Installed again by the next pre-commit run, needs network", None, RemoveContents, &["pre-commit"]),
+        ("Hugging Face models", "Machine learning", hf_hub, Reinstall, "Downloaded again on next use, needs network", Some("Models can be many GB, and gated models need your Hugging Face login to download again."), RemoveContents, NONE),
+        ("Composer cache", "PHP", pick(local.join("Composer"), cache.join("composer")), Safe, "Downloaded again by composer when needed", None, RemoveContents, &["composer"]),
+        ("Gradle caches", "Gradle", home.join(".gradle").join("caches"), Reinstall, "Downloaded again by Gradle, needs network", None, RemoveContents, GRADLE),
+        ("Gradle wrapper downloads", "Gradle", home.join(".gradle").join("wrapper").join("dists"), Reinstall, "Downloaded again by ./gradlew", None, RemoveContents, GRADLE),
+        ("Maven repository", "Maven", home.join(".m2").join("repository"), Reinstall, "Downloaded again by mvn, needs network", Some("Offline builds fail until dependencies are downloaded again."), RemoveContents, &["mvn"]),
+        ("NuGet packages", ".NET", home.join(".nuget").join("packages"), Reinstall, "Restored by dotnet restore, needs network", None, RemoveContents, NUGET),
+        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("v3-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
+        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("http-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
+        ("Go build cache", "Go", go_cache, Safe, "Rebuilt by go build", None, RemoveContents, GO),
+        ("Go module cache", "Go", go_mod, Reinstall, "Downloaded again by go, needs network", None, RemoveContents, GO),
+        ("Electron downloads", "Electron", pick(local.join("electron").join("Cache"), cache.join("electron")), Safe, "Downloaded again when needed", None, RemoveContents, ELECTRON),
+        ("electron-builder cache", "Electron", pick(local.join("electron-builder").join("Cache"), cache.join("electron-builder")), Safe, "Downloaded again when packaging", None, RemoveContents, ELECTRON),
+        ("Playwright browsers", "Testing", pick(local.join("ms-playwright"), cache.join("ms-playwright")), Reinstall, "npx playwright install", Some("Playwright tests fail until browsers are installed again."), RemoveContents, &["playwright"]),
+        ("Cypress binaries", "Testing", pick(local.join("Cypress").join("Cache"), cache.join("Cypress")), Reinstall, "npx cypress install", None, RemoveContents, &["cypress"]),
+        ("Puppeteer browsers", "Testing", dot_cache.join("puppeteer"), Reinstall, "npx puppeteer browsers install chrome", Some("Puppeteer scripts fail until a browser is installed again."), RemoveContents, &["puppeteer"]),
+        ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents, NODE),
     ];
 
     // pnpm keeps a separate store at the root of each drive that holds projects, e.g.
@@ -550,7 +731,7 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     for root in scan_roots {
         let tops: Vec<&Path> = if win { root.ancestors().last().into_iter().collect() } else { root.ancestors().collect() };
         for top in tops {
-            list.push(("pnpm store", "Node.js", top.join(".pnpm-store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune));
+            list.push(("pnpm store", "Node.js", top.join(".pnpm-store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE));
         }
     }
 
@@ -561,7 +742,7 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
             let k = p.to_string_lossy();
             seen.insert(if win { k.to_lowercase() } else { k.into_owned() })
         })
-        .map(|(label, ecosystem, path, safety, restore, note, action)| CacheEntry {
+        .map(|(label, ecosystem, path, safety, restore, note, action, tools)| CacheEntry {
             id: format!("cache:{}", path.display()),
             label,
             ecosystem,
@@ -570,6 +751,7 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
             restore,
             note,
             action,
+            tools,
         })
         .collect()
 }

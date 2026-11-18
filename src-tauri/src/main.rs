@@ -2,10 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod clean;
+mod cli;
 mod elevate;
 mod procs;
 mod rules;
 mod scan;
+mod store;
 #[cfg(test)]
 mod tests;
 
@@ -21,21 +23,45 @@ use tauri::{AppHandle, Emitter, State};
 /// State shared between commands. `items` holds the last scan result; `clean` only deletes
 /// paths found there, so the UI cannot ask for an arbitrary folder to be removed.
 #[derive(Default)]
-struct Shared {
+pub struct Shared {
     items: Mutex<HashMap<String, Item>>,
+    /// Folders the user never wants offered. Anything at or below them is skipped.
+    keep: Mutex<Vec<String>>,
     cancel: AtomicBool,
     busy: AtomicBool,
 }
 
+/// True when `path` is a kept folder or sits inside one.
+pub fn is_kept(path: &str, keep: &[String]) -> bool {
+    let p = PathBuf::from(path_key(Path::new(path)));
+    keep.iter().any(|k| p.starts_with(path_key(Path::new(k))))
+}
+
+/// Fills in which running programs use each item and which items are kept.
+fn refresh_flags(items: &mut [Item], keep: &[String], procs: &[procs::Proc]) {
+    for item in items {
+        item.kept = is_kept(&item.path, keep);
+        item.in_use_by = users(item, procs);
+    }
+}
+
+/// Running programs that use an item. See `procs::users_of`.
+fn users(item: &Item, procs: &[procs::Proc]) -> Vec<String> {
+    match item.group {
+        Group::Project => procs::users_of::<&str>(Path::new(&item.path), item.project.as_deref().map(Path::new), &[], procs),
+        Group::Cache => procs::users_of(Path::new(&item.path), None, &item.tools, procs),
+    }
+}
+
 /// Resets the busy flag when a command finishes, even on error.
-struct BusyGuard(Arc<Shared>);
+pub struct BusyGuard(Arc<Shared>);
 impl Drop for BusyGuard {
     fn drop(&mut self) {
         self.0.busy.store(false, SeqCst);
     }
 }
 
-fn claim(shared: &Arc<Shared>) -> Result<BusyGuard, String> {
+pub fn claim(shared: &Arc<Shared>) -> Result<BusyGuard, String> {
     if shared.busy.swap(true, SeqCst) {
         return Err("A scan or clean is already running".into());
     }
@@ -45,12 +71,12 @@ fn claim(shared: &Arc<Shared>) -> Result<BusyGuard, String> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Drive {
-    mount: String,
+pub struct Drive {
+    pub mount: String,
     label: String,
     total: u64,
     free: u64,
-    system: bool,
+    pub system: bool,
 }
 
 /// Whether a mounted file system is a drive the user keeps files on. On Linux this skips
@@ -85,7 +111,7 @@ fn is_system_drive(mount: &str) -> bool {
     }
 }
 
-fn drives() -> Vec<Drive> {
+pub fn drives() -> Vec<Drive> {
     let Ok(disks) = sysinfo::Disks::new_with_refreshed_list() else { return Vec::new() };
     let mut out: Vec<Drive> = disks
         .iter()
@@ -142,25 +168,27 @@ fn default_roots() -> Vec<String> {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ScanProgress {
-    phase: String,
-    dirs: u64,
-    found: u64,
-    sized: u64,
-    to_size: u64,
-    current: String,
+pub struct ScanProgress {
+    pub phase: String,
+    pub dirs: u64,
+    pub found: u64,
+    pub sized: u64,
+    pub to_size: u64,
+    pub current: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ScanResult {
-    items: Vec<Item>,
-    dirs: u64,
-    millis: u64,
-    cancelled: bool,
-    missing_roots: Vec<String>,
-    running_tools: Vec<String>,
+pub struct ScanResult {
+    pub items: Vec<Item>,
+    pub dirs: u64,
+    pub millis: u64,
+    pub cancelled: bool,
+    pub missing_roots: Vec<String>,
+    pub running_tools: Vec<String>,
 }
+
+pub type Emit<T> = Arc<dyn Fn(T) + Send + Sync>;
 
 #[tauri::command]
 async fn scan(
@@ -171,12 +199,22 @@ async fn scan(
 ) -> Result<ScanResult, String> {
     let shared = state.inner().clone();
     let _busy = claim(&shared)?;
-    tauri::async_runtime::spawn_blocking(move || run_scan(&app, &shared, roots, include_caches))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        let emit: Emit<ScanProgress> = Arc::new(move |p| {
+            let _ = app.emit("scan-progress", p);
+        });
+        let result = run_scan(emit, &shared, roots.clone(), include_caches);
+        if !result.cancelled {
+            // Shown again on the next start. Failing to save is not worth an error.
+            let _ = store::save_scan(&roots, &result.items);
+        }
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
-fn run_scan(app: &AppHandle, shared: &Arc<Shared>, roots: Vec<String>, include_caches: bool) -> ScanResult {
+pub fn run_scan(emit: Emit<ScanProgress>, shared: &Arc<Shared>, roots: Vec<String>, include_caches: bool) -> ScanResult {
     let started = Instant::now();
     let (roots, missing): (Vec<PathBuf>, Vec<PathBuf>) =
         roots.into_iter().map(PathBuf::from).partition(|p| p.is_dir());
@@ -187,7 +225,7 @@ fn run_scan(app: &AppHandle, shared: &Arc<Shared>, roots: Vec<String>, include_c
 
     // Report progress to the window a few times a second.
     let reporter = {
-        let (app, progress, phase, done) = (app.clone(), progress.clone(), phase.clone(), done.clone());
+        let (progress, phase, done) = (progress.clone(), phase.clone(), done.clone());
         std::thread::spawn(move || {
             loop {
                 let finished = done.load(SeqCst);
@@ -199,7 +237,7 @@ fn run_scan(app: &AppHandle, shared: &Arc<Shared>, roots: Vec<String>, include_c
                     to_size: progress.to_size.load(SeqCst),
                     current: progress.current.lock().unwrap().clone(),
                 };
-                let _ = app.emit("scan-progress", p);
+                emit(p);
                 if finished {
                     break;
                 }
@@ -218,23 +256,9 @@ fn run_scan(app: &AppHandle, shared: &Arc<Shared>, roots: Vec<String>, include_c
 
     *phase.lock().unwrap() = "processes".into();
     let procs = procs::snapshot();
-    for item in &mut items {
-        item.in_use_by = match item.group {
-            Group::Project => procs::users_of(
-                Path::new(&item.path),
-                item.project.as_deref().map(Path::new),
-                &[],
-                &procs,
-            ),
-            Group::Cache => procs::users_of(
-                Path::new(&item.path),
-                None,
-                procs::cache_tools(&item.ecosystem),
-                &procs,
-            ),
-        };
-    }
-    items.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    let keep = shared.keep.lock().unwrap().clone();
+    refresh_flags(&mut items, &keep, &procs);
+    items.sort_by_key(|i| std::cmp::Reverse(i.frees));
 
     *shared.items.lock().unwrap() = items.iter().map(|i| (i.id.clone(), i.clone())).collect();
 
@@ -258,35 +282,35 @@ fn cancel(state: State<'_, Arc<Shared>>) {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct CleanProgress {
-    done: usize,
-    total: usize,
-    current: String,
+pub struct CleanProgress {
+    pub done: usize,
+    pub total: usize,
+    pub current: String,
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct Outcome {
-    id: String,
-    label: String,
-    path: String,
-    ok: bool,
-    error: Option<String>,
+pub struct Outcome {
+    pub id: String,
+    pub label: String,
+    pub path: String,
+    pub ok: bool,
+    pub error: Option<String>,
     /// The OS refused access. Running as administrator (Windows) or fixing ownership (Linux)
     /// may get past it.
-    needs_admin: bool,
-    bytes: u64,
+    pub needs_admin: bool,
+    pub bytes: u64,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CleanReport {
-    outcomes: Vec<Outcome>,
-    /// Sum of the sizes of the folders that were removed.
-    counted_bytes: u64,
+pub struct CleanReport {
+    pub outcomes: Vec<Outcome>,
+    /// What the removed folders were expected to free (see `Item::frees`).
+    pub counted_bytes: u64,
     /// Change in free space on the affected drives. Lower than counted when files were hard links.
-    measured_bytes: i64,
-    cancelled: bool,
+    pub measured_bytes: i64,
+    pub cancelled: bool,
 }
 
 /// The mount point that holds `path`: the longest mount it sits under. On Windows that is the
@@ -314,13 +338,27 @@ async fn clean(app: AppHandle, state: State<'_, Arc<Shared>>, ids: Vec<String>) 
     let shared = state.inner().clone();
     let _busy = claim(&shared)?;
     tauri::async_runtime::spawn_blocking(move || {
-        run_clean(&|p| { let _ = app.emit("clean-progress", p); }, &shared, ids)
+        let report = run_clean(&|p| { let _ = app.emit("clean-progress", p); }, &shared, ids);
+        save_remaining(&shared);
+        report
     })
     .await
     .map_err(|e| e.to_string())
 }
 
-fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String>) -> CleanReport {
+/// Updates the saved scan after a delete, so the next start does not show deleted folders.
+fn save_remaining(shared: &Shared) {
+    let Some(saved) = store::load_scan() else { return };
+    let items = shared.items.lock().unwrap();
+    let left: Vec<Item> = saved.items.into_iter().filter(|i| items.contains_key(&i.id)).collect();
+    let _ = store::save_scan(&saved.roots, &left);
+}
+
+/// How often a long delete takes a new look at running programs, so a dev server started
+/// half way through still locks its folders.
+const PROCESS_REFRESH: Duration = Duration::from_secs(3);
+
+pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String>) -> CleanReport {
     let known: Vec<Option<Item>> = {
         let map = shared.items.lock().unwrap();
         ids.iter().map(|id| map.get(id).cloned()).collect()
@@ -330,7 +368,9 @@ fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String
     mounts.sort();
     mounts.dedup();
     let before = free_space(&mounts);
-    let procs = procs::snapshot();
+    let mut procs = procs::snapshot();
+    let mut looked = Instant::now();
+    let keep = shared.keep.lock().unwrap().clone();
 
     let total = ids.len();
     let mut outcomes = Vec::with_capacity(total);
@@ -351,8 +391,16 @@ fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String
             continue;
         };
         emit(CleanProgress { done: n, total, current: item.path.clone() });
+        if looked.elapsed() >= PROCESS_REFRESH {
+            procs = procs::snapshot();
+            looked = Instant::now();
+        }
 
-        let result = check_and_remove(&item, &procs);
+        let result = if is_kept(&item.path, &keep) {
+            Err("On the keep list".into())
+        } else {
+            check_and_remove(&item, &procs)
+        };
         if result.is_ok() {
             shared.items.lock().unwrap().remove(&item.id);
         }
@@ -363,7 +411,7 @@ fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String
             ok: result.is_ok(),
             needs_admin: result.as_ref().is_err_and(|f| f.denied),
             error: result.err().map(|f| f.message),
-            bytes: item.bytes,
+            bytes: item.frees,
         });
     }
     emit(CleanProgress { done: total, total, current: String::new() });
@@ -383,16 +431,13 @@ fn check_and_remove(item: &Item, procs: &[procs::Proc]) -> Result<(), clean::Fai
     if !path.exists() {
         return Err("Already gone".into());
     }
-    let users = match item.group {
-        Group::Project => {
-            match rules::match_project(path) {
-                Some(rule) if rule.id == item.rule_id => {}
-                _ => return Err("The project files that made this folder safe to remove are gone".into()),
-            }
-            procs::users_of(path, item.project.as_deref().map(Path::new), &[], procs)
+    if item.group == Group::Project {
+        match rules::match_project(path) {
+            Some(rule) if rule.id == item.rule_id => {}
+            _ => return Err("The project files that made this folder safe to remove are gone".into()),
         }
-        Group::Cache => procs::users_of(path, None, procs::cache_tools(&item.ecosystem), procs),
-    };
+    }
+    let users = users(item, procs);
     if !users.is_empty() {
         return Err(format!("In use by {}", users.join(", ")).into());
     }
@@ -426,6 +471,53 @@ fn app_info() -> AppInfo {
 }
 
 #[tauri::command]
+fn get_keep(state: State<'_, Arc<Shared>>) -> Vec<String> {
+    state.keep.lock().unwrap().clone()
+}
+
+/// Replaces the keep list and returns the ids of the scanned items it now covers.
+#[tauri::command]
+fn set_keep(state: State<'_, Arc<Shared>>, paths: Vec<String>) -> Result<Vec<String>, String> {
+    let mut paths: Vec<String> = paths.into_iter().filter(|p| !p.trim().is_empty()).collect();
+    paths.sort();
+    paths.dedup();
+    store::save_keep(&paths)?;
+    *state.keep.lock().unwrap() = paths.clone();
+    let mut items = state.items.lock().unwrap();
+    let mut kept = Vec::new();
+    for item in items.values_mut() {
+        item.kept = is_kept(&item.path, &paths);
+        if item.kept {
+            kept.push(item.id.clone());
+        }
+    }
+    Ok(kept)
+}
+
+/// The last finished scan, so the list is there right after starting. Running programs are
+/// looked at again and everything is checked again before deleting, as after a fresh scan.
+#[tauri::command]
+fn last_scan(state: State<'_, Arc<Shared>>) -> Option<store::SavedScan> {
+    if state.busy.load(SeqCst) {
+        return None;
+    }
+    let mut saved = store::load_scan()?;
+    let keep = state.keep.lock().unwrap().clone();
+    refresh_flags(&mut saved.items, &keep, &procs::snapshot());
+    *state.items.lock().unwrap() = saved.items.iter().map(|i| (i.id.clone(), i.clone())).collect();
+    Some(saved)
+}
+
+/// Writes the last scan's items to a CSV or JSON file the user picked.
+#[tauri::command]
+fn export(state: State<'_, Arc<Shared>>, path: String) -> Result<usize, String> {
+    let mut items: Vec<Item> = state.items.lock().unwrap().values().cloned().collect();
+    items.sort_by_key(|i| std::cmp::Reverse(i.frees));
+    store::export(Path::new(&path), &items)?;
+    Ok(items.len())
+}
+
+#[tauri::command]
 fn restart_as_admin(app: AppHandle, state: State<'_, Arc<Shared>>, scan: bool) -> Result<(), String> {
     if state.busy.load(SeqCst) {
         return Err("Wait for the current scan or delete to finish".into());
@@ -445,16 +537,21 @@ fn main() {
     }
 
     let args: Vec<String> = std::env::args().collect();
-    if let Some(pid) = args.iter().position(|a| a == "--after").and_then(|i| args.get(i + 1)) {
-        if let Ok(pid) = pid.parse() {
+    if let Some(code) = cli::run(&args) {
+        std::process::exit(code);
+    }
+    if let Some(pid) = args.iter().position(|a| a == "--after").and_then(|i| args.get(i + 1))
+        && let Ok(pid) = pid.parse() {
             elevate::wait_for_parent(pid);
         }
-    }
+
+    let shared = Shared::default();
+    *shared.keep.lock().unwrap() = store::load_keep();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(Arc::new(Shared::default()))
+        .manage(Arc::new(shared))
         .invoke_handler(tauri::generate_handler![
             list_drives,
             default_roots,
@@ -462,6 +559,10 @@ fn main() {
             cancel,
             clean,
             app_info,
+            get_keep,
+            set_keep,
+            last_scan,
+            export,
             restart_as_admin
         ])
         .run(tauri::generate_context!())
