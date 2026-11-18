@@ -88,19 +88,23 @@ fn key(p: &Path) -> String {
 /// True for symlinks and Windows junctions. The walker never follows them.
 fn is_link(entry: &fs::DirEntry) -> bool {
     let Ok(ft) = entry.file_type() else { return true };
-    if ft.is_symlink() {
-        return true;
+    ft.is_symlink() || is_reparse_point(entry)
+}
+
+/// Junctions and other reparse points are not symlinks to `file_type`. A folder whose
+/// attributes cannot be read is treated as one, so it is never entered.
+#[cfg(windows)]
+fn is_reparse_point(entry: &fs::DirEntry) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    match entry.metadata() {
+        Ok(md) => md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        Err(_) => true,
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        if let Ok(md) = entry.metadata() {
-            return md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0;
-        }
-        return true;
-    }
-    #[allow(unreachable_code)]
+}
+
+#[cfg(not(windows))]
+fn is_reparse_point(_entry: &fs::DirEntry) -> bool {
     false
 }
 

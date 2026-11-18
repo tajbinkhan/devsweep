@@ -574,15 +574,21 @@ fn command_line_options_and_picking() {
 #[test]
 fn export_writes_csv_with_quoting_and_json() {
     let t = fixture("export");
-    file(&t.join("my, \"app\"/package.json"), 2);
-    file(&t.join("my, \"app\"/node_modules/x.js"), 10);
+    // A comma in the path needs quoting. Windows forbids `"` in file names, so the quote
+    // case uses an edited copy of the item instead of a folder on disk.
+    file(&t.join("my, app/package.json"), 2);
+    file(&t.join("my, app/node_modules/x.js"), 10);
     let items = scan_all(&t);
     let csv = crate::store::to_csv(&items);
     let mut lines = csv.lines();
     assert!(lines.next().unwrap().starts_with("path,folder,type,group,bytes,frees"));
     let row = lines.next().unwrap();
-    assert!(row.starts_with('"') && row.contains("\"\"app\"\""), "{row}");
+    assert!(row.starts_with('"') && row.contains("my, app"), "{row}");
     assert!(row.contains(",node_modules,Node.js,project,10,10,1,"), "{row}");
+    let mut quoted = items[0].clone();
+    quoted.restore = r#"say "hi""#.into();
+    let row = crate::store::to_csv(&[quoted]);
+    assert!(row.contains(r#""say ""hi""""#), "{row}");
 
     let out = t.join("out.json");
     crate::store::export(&out, &items).unwrap();
