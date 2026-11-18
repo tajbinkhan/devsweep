@@ -51,4 +51,4 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Test the interface logic
-        run: node --test tests/ui
+        run: node --test "tests/ui/*.test.js"
