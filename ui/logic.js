@@ -1,5 +1,5 @@
 // Pure functions behind the interface: formatting and which rows get selected. They touch no
-// DOM, so `node --test tests/ui` can check them. In the window they are `window.DevSweepLogic`.
+// DOM, so `node --test "tests/ui/*.test.js"` can check them. In the window they are `window.DevSweepLogic`.
 (function (root) {
   const DAY = 86400;
 

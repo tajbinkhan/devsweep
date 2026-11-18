@@ -241,7 +241,7 @@ cd src-tauri && cargo test
 The interface's selection and formatting rules live in `ui/logic.js` and have their own tests:
 
 ```bash
-node --test tests/ui
+node --test "tests/ui/*.test.js"
 ```
 
 GitHub Actions runs both, plus `cargo clippy -- -D warnings`, on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
@@ -283,7 +283,7 @@ Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbink
 
 - **Missing toolchain?** Add a `ProjectRule` to `PROJECT_RULES` in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs) (about ten lines), or a line to `cache_entries` for a global cache. Add a case to [`src-tauri/src/tests.rs`](src-tauri/src/tests.rs) that builds a fake project and checks the folder is found, and that a lookalike folder without the project file is not.
 - **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
-- Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test tests/ui`, before opening a pull request. CI runs the same checks on Windows and Linux.
+- Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test "tests/ui/*.test.js"`, before opening a pull request. CI runs the same checks on Windows and Linux.
 
 ## License
 

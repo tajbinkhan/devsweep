@@ -1,4 +1,4 @@
-// Tests for the interface's selection and formatting rules. Run with `node --test tests/ui`.
+// Tests for the interface's selection and formatting rules. Run with `node --test "tests/ui/*.test.js"`.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const L = require("../../ui/logic.js");
