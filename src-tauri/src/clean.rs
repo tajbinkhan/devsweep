@@ -320,51 +320,59 @@ pub fn remove_contents(path: &Path) -> Result<(), Failure> {
     summarize(remove_children(path))
 }
 
+/// Runs `pnpm store prune` for one store.
+///
+/// pnpm is found by full path and started directly, never through `cmd /C`, which would
+/// read `&` or `|` in the store path as the start of another command. It never runs while
+/// DevSweep has administrator rights: pnpm can sit in any folder on PATH, some of which any
+/// program can write to, and pruning the user's own store does not need those rights.
 pub fn pnpm_prune(store: &Path) -> Result<(), String> {
-    let mut cmd = if cfg!(windows) {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "pnpm", "store", "prune", "--store-dir"]);
-        c
-    } else {
-        let mut c = std::process::Command::new(pnpm_program());
-        c.args(["store", "prune", "--store-dir"]);
-        c
-    };
-    cmd.arg(store);
+    if crate::elevate::is_elevated() {
+        return Err("pnpm does not run while DevSweep runs as administrator. Restart DevSweep normally to prune the pnpm store.".into());
+    }
+    let pnpm = pnpm_program().ok_or("Could not find pnpm. Install it, or run pnpm store prune yourself.")?;
+    let mut cmd = crate::command::new(&pnpm.to_string_lossy());
+    cmd.args(["store", "prune", "--store-dir"]).arg(store);
     if let Some(parent) = store.parent() {
         cmd.current_dir(parent);
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    let out = cmd.output().map_err(|e| format!("Could not run pnpm: {e}"))?;
+    let out = crate::command::output(cmd, std::time::Duration::from_secs(30 * 60))
+        .map_err(|e| format!("Could not run pnpm: {e}"))?;
     if out.status.success() {
         Ok(())
     } else {
-        let msg = String::from_utf8_lossy(&out.stderr);
-        let msg = if msg.trim().is_empty() { String::from_utf8_lossy(&out.stdout) } else { msg };
-        Err(format!("pnpm store prune failed: {}", msg.trim()))
+        Err(format!("pnpm store prune failed: {}", crate::command::message(&out)))
     }
 }
 
-/// pnpm's path. A Linux app started from the desktop menu does not get the PATH set up by
-/// the shell's startup files, so look where pnpm's own installer and corepack put it.
-fn pnpm_program() -> std::path::PathBuf {
-    let on_path = std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("pnpm").is_file()));
-    if !on_path {
-        let home = dirs::home_dir().unwrap_or_default();
-        let candidates = [
-            std::env::var_os("PNPM_HOME").map(|h| Path::new(&h).join("pnpm")),
-            dirs::data_local_dir().map(|d| d.join("pnpm").join("pnpm")),
-            Some(home.join(".local").join("bin").join("pnpm")),
-            Some(home.join(".volta").join("bin").join("pnpm")),
-        ];
-        if let Some(found) = candidates.into_iter().flatten().find(|c| c.is_file()) {
-            return found;
-        }
-    }
-    "pnpm".into()
+/// File names pnpm is installed under: its standalone binary, and on Windows also the
+/// `.cmd` shim that npm and corepack write.
+const PNPM_NAMES: &[&str] = if cfg!(windows) { &["pnpm.exe", "pnpm.cmd"] } else { &["pnpm"] };
+
+/// The first of `names` that exists in `dirs`, searched in order. Relative folders are
+/// skipped: they would point into whatever folder DevSweep happens to run in.
+pub fn find_program(dirs: &[PathBuf], names: &[&str]) -> Option<PathBuf> {
+    dirs.iter()
+        .filter(|d| d.is_absolute())
+        .flat_map(|d| names.iter().map(move |n| d.join(n)))
+        .find(|p| p.is_file())
+}
+
+/// pnpm's full path: the PATH folders first, then where pnpm's own installer, corepack and
+/// Volta put it. A Linux app started from the desktop menu does not get the PATH set up by
+/// the shell's startup files, so those places are worth checking too.
+fn pnpm_program() -> Option<PathBuf> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    dirs.extend(
+        [
+            std::env::var_os("PNPM_HOME").map(PathBuf::from),
+            dirs::data_local_dir().map(|d| d.join("pnpm")),
+            Some(home.join(".local").join("bin")),
+            Some(home.join(".volta").join("bin")),
+        ]
+        .into_iter()
+        .flatten(),
+    );
+    find_program(&dirs, PNPM_NAMES)
 }

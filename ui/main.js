@@ -4,7 +4,7 @@ const dialog = window.__TAURI__.dialog;
 const opener = window.__TAURI__.opener;
 
 const $ = (id) => document.getElementById(id);
-const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf } = window.DevSweepLogic;
+const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck } = window.DevSweepLogic;
 
 const state = {
   roots: [],
@@ -18,6 +18,17 @@ const state = {
   canElevate: true,
   platform: "windows",
   keep: [],
+  version: "",
+  /** "install" when this copy can update itself, "download" when it links to the download page. */
+  updateMode: "download",
+  settings: { checkUpdates: true },
+  /** The newer release found by the last check, or null. */
+  update: null,
+  /** When the last successful check ran, in Unix seconds. */
+  lastCheck: 0,
+  /** A version whose bar was closed this session. */
+  hiddenVersion: null,
+  updating: false,
   /** Position in the visible list of the last checkbox clicked, for shift-click ranges. */
   anchor: null,
 };
@@ -30,6 +41,7 @@ const sep = () => (isWindows() ? "\\" : "/");
 
 function applyPlatformText() {
   if (isWindows()) return;
+  $("include-caches-text").textContent = "Include global caches and Docker";
   $("rule-skip").innerHTML =
     "System folders such as <code>/usr</code> and <code>/opt</code>, <code>~/.config</code>, <code>~/.local</code>, " +
     "<code>~/.cache</code>, Flatpak and Snap apps, editor extensions, Node version managers and <code>.git</code> " +
@@ -130,6 +142,12 @@ listen("scan-progress", ({ payload: p }) => {
   } else if (p.phase === "caches") {
     fill.classList.add("indeterminate");
     $("progress-label").textContent = "Measuring package caches";
+  } else if (p.phase === "docker") {
+    fill.classList.add("indeterminate");
+    $("progress-label").textContent = "Asking Docker what it can free";
+  } else if (p.phase === "wsl") {
+    fill.classList.add("indeterminate");
+    $("progress-label").textContent = "Measuring WSL disks";
   } else if (p.phase === "processes") {
     fill.classList.add("indeterminate");
     $("progress-label").textContent = "Checking running programs";
@@ -162,6 +180,7 @@ async function runScan() {
     if (res.missingRoots.length) notes.push(`Not found: ${res.missingRoots.join(", ")}.`);
     const busy = res.runningTools.filter((t) => t !== "rust-analyzer");
     if (busy.length) notes.push(`Running now: ${res.runningTools.join(", ")}. Folders they use are locked.`);
+    notes.push(...res.notes);
     showNotice(notes.join(" "));
     showResults();
   } catch (err) {
@@ -349,6 +368,7 @@ const KEEP_ICON = `<svg viewBox="0 0 16 16"><path d="M4 2.5h8v11l-4-3-4 3z"/></s
 
 /** Tooltip for the age column: both dates that go into "last used". */
 function ageTitle(it) {
+  if (isDocker(it)) return "Docker does not record when an image or cache entry was last used";
   const parts = [];
   if (it.projectActive) parts.push(`Project last changed ${fmtAge(it.projectActive)}`);
   parts.push(`Folder last written ${fmtAge(it.lastWrite)}`);
@@ -376,20 +396,27 @@ function render() {
         : `<span class="badge ${s.cls}" title="${esc(it.note || "")}">${s.label}</span>`;
       // Hard links can make a folder look bigger than what deleting it gives back.
       const shared = it.bytes > it.frees * 1.1 && it.bytes - it.frees > 1024 * 1024;
-      const sizeTitle = shared
+      const sizeTitle = isDisk(it)
+        ? `The disk file takes ${fmtBytes(it.bytes)}. Compacting it should give back about ${fmtBytes(it.frees)}, the part the Linux files inside do not use.`
+        : isDocker(it)
+        ? "What docker system df says a prune can free"
+        : shared
         ? `The files add up to ${fmtBytes(it.bytes)}, but deleting the folder frees ${fmtBytes(it.frees)}. Some files are hard links: counted once per link, or shared with files outside this folder that stay on disk.`
         : `${it.files.toLocaleString()} files`;
+      const reveal = isDocker(it)
+        ? ""
+        : `<button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in ${fileManager()}" aria-label="Show ${esc(it.path)} in ${fileManager()}">${REVEAL_ICON}</button>`;
       return `<tr class="${sel ? "selected" : ""} ${locked ? "locked" : ""}">
         <td class="col-check"><input type="checkbox" data-id="${esc(it.id)}" ${sel ? "checked" : ""} ${locked ? "disabled" : ""} aria-label="Select ${esc(it.path)}"></td>
         <td title="${esc(sizeTitle)}"><div class="size">${fmtBytes(it.frees)}${shared ? `<span class="size-of">of ${fmtBytes(it.bytes)}</span>` : ""}</div><div class="size-bar"><div style="width:${((it.frees / max) * 100).toFixed(1)}%"></div></div></td>
         <td><div class="folder-name">${name}</div><div class="folder-path" title="${esc(it.path)}">${esc(it.path)}</div></td>
         <td class="eco">${esc(it.ecosystem)}</td>
-        <td class="age ${days < 7 ? "recent" : ""}" title="${esc(ageTitle(it))}">${fmtAge(it.lastUsed)}</td>
+        <td class="age ${days < 7 && !isDocker(it) ? "recent" : ""}" title="${esc(ageTitle(it))}">${isDocker(it) ? "Not tracked" : fmtAge(it.lastUsed)}</td>
         <td>${badge}<span class="restore" title="${esc(it.restore)}">${esc(it.restore)}</span></td>
         <td><div class="row-actions">
           <button class="icon-btn ${kept ? "on" : ""}" type="button" data-keep="${esc(keepPath(it))}" aria-pressed="${kept}"
             title="${kept ? "Stop keeping" : "Keep: never offer"} ${esc(keepPath(it))}" aria-label="${kept ? "Stop keeping" : "Keep"} ${esc(keepPath(it))}">${KEEP_ICON}</button>
-          <button class="icon-btn" type="button" data-reveal="${esc(it.path)}" title="Show in ${fileManager()}" aria-label="Show ${esc(it.path)} in ${fileManager()}">${REVEAL_ICON}</button>
+          ${reveal}
         </div></td>
       </tr>`;
     })
@@ -438,7 +465,8 @@ $("clean").addEventListener("click", () => {
   const chosen = selectedItems();
   if (!chosen.length) return;
   const total = chosen.reduce((a, b) => a + b.frees, 0);
-  $("confirm-title").textContent = `Delete ${chosen.length} folder${chosen.length === 1 ? "" : "s"}?`;
+  const verb = chosen.every((i) => !isDocker(i) && !isDisk(i)) ? "Delete" : "Clean";
+  $("confirm-title").textContent = `${verb} ${noun(chosen)}?`;
   $("confirm-lead").textContent = `This frees up to ${fmtBytes(total)}. Here is how each kind comes back:`;
 
   const groups = new Map();
@@ -457,12 +485,17 @@ $("clean").addEventListener("click", () => {
     )
     .join("");
 
+  // Every distinct warning, so a WSL shutdown is never hidden behind a venv note.
   const cautious = chosen.filter((i) => i.safety === "caution");
+  const warnings = [...new Set(cautious.map((i) => i.note).filter(Boolean))];
   $("confirm-caution").hidden = cautious.length === 0;
-  $("confirm-caution").textContent = cautious.length
-    ? `${cautious.length} selected folder${cautious.length === 1 ? " is" : "s are"} marked "Check first". ${cautious[0].note || ""}`
+  $("confirm-caution").innerHTML = cautious.length
+    ? `${esc(noun(cautious))} ${cautious.length === 1 ? "is" : "are"} marked "Check first".` +
+      warnings.map((w) => `<span class="warn-line">${esc(w)}</span>`).join("")
     : "";
-  $("confirm-ok").textContent = `Delete ${fmtBytes(total)}`;
+  // Nothing is deleted from the drive's folders when only Docker and disks are picked.
+  $("confirm-fine").hidden = chosen.every((i) => isDocker(i) || isDisk(i));
+  $("confirm-ok").textContent = `${verb} ${fmtBytes(total)}`;
   $("confirm").showModal();
 });
 
@@ -505,6 +538,7 @@ function showReport(report, error) {
     $("report").showModal();
     return;
   }
+  const byId = new Map(state.items.map((i) => [i.id, i]));
   const ok = report.outcomes.filter((o) => o.ok);
   const failed = report.outcomes.filter((o) => !o.ok);
   const removed = new Set(ok.map((o) => o.id));
@@ -513,9 +547,14 @@ function showReport(report, error) {
 
   $("report-title").textContent = failed.length ? "Finished with some problems" : "Done";
   const measured = Math.max(0, report.measuredBytes);
-  let lead = `Deleted ${ok.length} folder${ok.length === 1 ? "" : "s"}. Free space went up by ${fmtBytes(measured)}.`;
-  if (report.countedBytes > measured * 1.15 && report.countedBytes - measured > 50 * 1024 * 1024) {
-    lead += ` That is less than the ${fmtBytes(report.countedBytes)} expected, because some files were shared with other folders through hard links, or other programs wrote to the drive meanwhile.`;
+  const okItems = ok.map((o) => byId.get(o.id) || {});
+  const verb = okItems.every((i) => !isDocker(i) && !isDisk(i)) ? "Deleted" : "Cleaned";
+  let lead = `${verb} ${noun(okItems)}. Free space went up by ${fmtBytes(measured)}.`;
+  if (fellShort(report)) {
+    lead += ` That is less than the ${fmtBytes(report.countedBytes - report.vmBytes)} expected, because some files were shared with other folders through hard links, or other programs wrote to the drive meanwhile.`;
+  }
+  if (report.vmBytes > 0) {
+    lead += ` Docker freed ${fmtBytes(report.vmBytes)} inside its virtual disk. The drive gets that back once the disk is compacted: stop Docker, scan again, and pick its disk under Global caches.`;
   }
   if (report.cancelled) lead += " Stopped early on request.";
   if (failed.length) lead += ` ${failed.length} could not be deleted:`;
@@ -530,7 +569,12 @@ function showReport(report, error) {
   const explainOwner = denied > 0 && !state.elevated && !state.canElevate;
   $("admin-note").hidden = !(offerAdmin || explainOwner);
   $("restart-admin").hidden = !offerAdmin;
-  if (offerAdmin) {
+  const disksOnly = deniedItems.every((f) => isDisk(byId.get(f.id) || {}));
+  if (offerAdmin && disksOnly) {
+    $("admin-note").textContent =
+      `Compacting a WSL disk needs administrator rights. Restart DevSweep as administrator and it will scan again, ` +
+      `so you can compact ${one ? "it" : "them"} there.`;
+  } else if (offerAdmin) {
     $("admin-note").textContent =
       `Windows refused access to ${one ? "this folder" : `${denied} of these folders`}. ` +
       `${one ? "It was" : "They were"} probably created by a program running as administrator. ` +
@@ -546,6 +590,126 @@ function showReport(report, error) {
   render();
   renderDrives();
 }
+
+/* Updates */
+
+async function checkForUpdate(manual) {
+  if (state.updating) return;
+  if (manual) $("about-status").textContent = "Checking";
+  try {
+    const info = await invoke("check_update");
+    state.lastCheck = Date.now() / 1000;
+    state.update = info;
+    const opts = { manual, skipped: state.settings.skippedVersion, hidden: state.hiddenVersion };
+    if (showsUpdate(info, opts)) showUpdate(info);
+    if (manual) {
+      $("about-status").textContent = !info
+        ? "You have the newest version."
+        : info.version === state.settings.skippedVersion
+        ? `DevSweep ${info.version} is available. You chose to skip it.`
+        : `DevSweep ${info.version} is available.`;
+    }
+  } catch (err) {
+    // A failed check (offline, GitHub down) is not worth interrupting anyone for. It is
+    // tried again within the hour, since `lastCheck` only moves on success.
+    if (manual) $("about-status").textContent = String(err);
+  }
+}
+
+// While DevSweep stays open, look again once a day. The timer ticks hourly and compares
+// clock times, so a computer that slept through the night still checks when it wakes.
+setInterval(() => {
+  if (state.settings.checkUpdates && dueForCheck(state.lastCheck, Date.now() / 1000)) checkForUpdate(false);
+}, 60 * 60 * 1000);
+
+function showUpdate(info) {
+  $("update-text").textContent = `DevSweep ${info.version} is available. You have ${state.version}.`;
+  $("update-go").textContent = info.mode === "install" ? "Update and restart" : "Download";
+  $("update-go").disabled = false;
+  $("update-notes").hidden = !info.notes;
+  $("update").hidden = false;
+}
+
+$("update-notes").addEventListener("click", () => {
+  if (!state.update) return;
+  $("notes-title").textContent = `What's new in DevSweep ${state.update.version}`;
+  $("notes-body").textContent = state.update.notes || "";
+  $("notes").showModal();
+});
+
+$("update-hide").addEventListener("click", () => {
+  if (state.updating) return;
+  // Stays hidden through the daily checks until the next start, unless a newer version comes out.
+  state.hiddenVersion = state.update?.version || null;
+  $("update").hidden = true;
+});
+
+$("update-skip").addEventListener("click", async () => {
+  if (state.updating || !state.update) return;
+  const next = { ...state.settings, skippedVersion: state.update.version };
+  try {
+    await invoke("set_settings", { settings: next });
+    state.settings = next;
+    $("update").hidden = true;
+  } catch (err) {
+    showNotice(String(err));
+  }
+});
+
+$("update-go").addEventListener("click", async () => {
+  const info = state.update;
+  if (!info || state.updating) return;
+  if (info.mode !== "install") {
+    try { await invoke("open_releases_page"); } catch (err) { showNotice(String(err)); }
+    return;
+  }
+  if (state.scanning) {
+    showNotice("Wait for the scan to finish, then update.");
+    return;
+  }
+  state.updating = true;
+  $("update-go").disabled = true;
+  $("update-go").textContent = "Downloading";
+  try {
+    // Ends with DevSweep starting again as the new version.
+    await invoke("install_update");
+  } catch (err) {
+    showNotice(String(err));
+    $("update-go").disabled = false;
+    $("update-go").textContent = "Update and restart";
+  } finally {
+    state.updating = false;
+  }
+});
+
+listen("update-progress", ({ payload: p }) => {
+  $("update-go").textContent = p.total && p.downloaded >= p.total ? "Installing" : downloadLabel(p.downloaded, p.total);
+});
+
+$("about-open").addEventListener("click", () => {
+  $("about-version").textContent = state.version;
+  $("check-updates").checked = state.settings.checkUpdates;
+  $("about-mode").textContent = state.updateMode === "install"
+    ? "Updates download, are checked against DevSweep's signing key, and install with one click."
+    : isWindows()
+    ? "This is the portable copy, so it cannot replace itself. A new version is announced with a link to the download."
+    : "Packages from .deb or .rpm update through your package manager, so a new version is announced with a link to the download. The AppImage updates itself.";
+  $("about-status").textContent = state.update ? `DevSweep ${state.update.version} is available.` : "";
+  $("about").showModal();
+});
+
+$("check-updates").addEventListener("change", async (e) => {
+  const next = { ...state.settings, checkUpdates: e.target.checked };
+  try {
+    await invoke("set_settings", { settings: next });
+    state.settings = next;
+  } catch (err) {
+    e.target.checked = state.settings.checkUpdates;
+    $("about-status").textContent = String(err);
+  }
+});
+
+$("check-now").addEventListener("click", () => checkForUpdate(true));
 
 /* Start */
 
@@ -565,6 +729,12 @@ $("restart-admin").addEventListener("click", async () => {
   state.elevated = info.elevated;
   state.canElevate = info.canElevate;
   state.platform = info.platform;
+  state.version = info.version;
+  state.updateMode = info.updateMode;
+  $("about-open").textContent = `v${info.version}`;
+  try { state.settings = await invoke("get_settings"); } catch {}
+  // In the background: the list must not wait for GitHub.
+  if (state.settings.checkUpdates) checkForUpdate(false);
   state.keep = await invoke("get_keep");
   renderKeep();
   applyPlatformText();

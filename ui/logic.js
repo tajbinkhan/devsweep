@@ -53,6 +53,53 @@
     return rows.slice(a, b + 1).filter(selectable).map((r) => r.id);
   }
 
+  /** Cleaned by a docker command. Its `path` is that command, not a folder. */
+  function isDocker(item) {
+    return String(item.action || "").startsWith("docker_");
+  }
+
+  /** A WSL virtual disk that gets compacted, not deleted. */
+  function isDisk(item) {
+    return item.action === "compact_disk";
+  }
+
+  /** "3 folders" when every item is a folder on disk, "3 items" once Docker or a disk is among them. */
+  function noun(items, n = items.length) {
+    const word = items.every((i) => !isDocker(i) && !isDisk(i)) ? "folder" : "item";
+    return `${n} ${word}${n === 1 ? "" : "s"}`;
+  }
+
+  /**
+   * Whether the free space a clean measured is well short of what it should have freed on
+   * the drive. Space Docker freed inside its virtual disk never reaches the drive, so it is
+   * left out of the expectation.
+   */
+  function fellShort(report) {
+    const expected = report.countedBytes - (report.vmBytes || 0);
+    const measured = Math.max(0, report.measuredBytes);
+    return expected > measured * 1.15 && expected - measured > 50 * 1024 * 1024;
+  }
+
+  /** The update button's text while the new version downloads. */
+  function downloadLabel(downloaded, total) {
+    if (!total) return `Downloading ${fmtBytes(downloaded)}`;
+    return `Downloading ${Math.min(100, Math.floor((downloaded / total) * 100))}%`;
+  }
+
+  /**
+   * Whether the update bar shows a release. "Check now" always shows it. Otherwise a version
+   * the user skipped, or closed this session, stays out of sight until a newer one comes out.
+   */
+  function showsUpdate(info, { manual = false, skipped = null, hidden = null } = {}) {
+    if (!info) return false;
+    return manual || (info.version !== skipped && info.version !== hidden);
+  }
+
+  /** Whether a day has passed since the last successful update check. */
+  function dueForCheck(lastCheck, now) {
+    return !lastCheck || now - lastCheck >= DAY;
+  }
+
   /** The largest value without spreading the array, which fails on very long lists. */
   function maxOf(values) {
     let m = 0;
@@ -60,7 +107,7 @@
     return m;
   }
 
-  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf };
+  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DevSweepLogic = api;
 })(typeof window !== "undefined" ? window : globalThis);

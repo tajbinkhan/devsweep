@@ -597,3 +597,183 @@ fn export_writes_csv_with_quoting_and_json() {
     assert_eq!(back[0].path, items[0].path);
     let _ = fs::remove_dir_all(&t);
 }
+
+#[test]
+fn docker_sizes_and_usage_are_read_from_its_own_output() {
+    use crate::docker::{parse_df, parse_info, parse_size, Kind, Usage};
+    assert_eq!(parse_size("252.5MB (15%)"), Some(252_500_000));
+    assert_eq!(parse_size("184.3kB"), Some(184_300));
+    assert_eq!(parse_size("0B"), Some(0));
+    assert_eq!(parse_size("1.656GB"), Some(1_656_000_000));
+    assert_eq!(parse_size("2GiB"), Some(2 * 1024 * 1024 * 1024));
+    assert_eq!(parse_size("lots"), None);
+
+    let df = r#"{"Active":"3","Reclaimable":"252.5MB (15%)","Size":"1.656GB","TotalCount":"7","Type":"Images"}
+{"Active":"0","Reclaimable":"184.3kB (100%)","Size":"184.3kB","TotalCount":"7","Type":"Containers"}
+{"Active":"8","Reclaimable":"0B (0%)","Size":"1.852GB","TotalCount":"8","Type":"Local Volumes"}
+{"Active":"0","Reclaimable":"0B","Size":"0B","TotalCount":"0","Type":"Build Cache"}
+not json"#;
+    let usage = parse_df(df);
+    assert_eq!(usage.len(), 4);
+    assert_eq!(usage[0], Usage { kind: Kind::Images, size: 1_656_000_000, reclaimable: 252_500_000 });
+    assert_eq!(usage[2].kind, Kind::Volumes);
+
+    let desktop = parse_info("linux\tDocker Desktop\t/var/lib/docker\n").unwrap();
+    assert!(desktop.in_vm(), "Docker Desktop always runs a VM");
+    let native = parse_info("linux\tUbuntu 24.04 LTS\t/var/lib/docker").unwrap();
+    assert_eq!(native.in_vm(), !cfg!(target_os = "linux"), "a Linux engine on Windows runs in WSL");
+    let windows = parse_info(&["windows", "Windows Server 2022", r"C:\ProgramData\docker"].join("\t")).unwrap();
+    assert!(!windows.in_vm());
+    assert!(parse_info("\n").is_none());
+}
+
+#[test]
+fn docker_rows_say_how_they_come_back_and_where_space_goes() {
+    use crate::docker::{item, parse_info, Kind, Usage};
+    use crate::rules::Safety;
+    let native = parse_info(&["windows", "Windows Server 2022", r"C:\ProgramData\docker"].join("\t")).unwrap();
+    let desktop = parse_info("linux\tDocker Desktop\t/var/lib/docker").unwrap();
+    let u = |kind| Usage { kind, size: 10, reclaimable: 5 };
+
+    let cache = item(&u(Kind::BuildCache), &native, 1000);
+    assert_eq!((cache.safety, cache.frees, cache.last_used), (Safety::Safe, 5, 1000));
+    assert_eq!(cache.path, "docker builder prune --all");
+    assert_eq!(cache.space_on.as_deref(), Some(r"C:\ProgramData\docker"));
+    assert!(!cache.in_vm && cache.tools.contains(&"docker-build".to_string()));
+    assert!(cache.action.is_docker());
+
+    let images = item(&u(Kind::Images), &desktop, 1000);
+    assert_eq!(images.safety, Safety::Reinstall);
+    assert!(images.in_vm && images.space_on.is_none());
+    assert!(images.note.as_deref().unwrap().contains("virtual disk"));
+
+    for kind in [Kind::Containers, Kind::Volumes] {
+        assert_eq!(item(&u(kind), &native, 0).safety, Safety::Caution, "{kind:?} cannot be brought back");
+    }
+}
+
+#[test]
+fn a_kept_docker_row_is_refused_without_running_docker() {
+    use crate::docker::{item, parse_info, Kind, Usage};
+    let engine = parse_info("linux\tUbuntu\t/var/lib/docker").unwrap();
+    let it = item(&Usage { kind: Kind::Images, size: 1, reclaimable: 1 }, &engine, 0);
+    let shared = shared_with(std::slice::from_ref(&it));
+    *shared.keep.lock().unwrap() = vec![it.path.clone()];
+    let report = crate::run_clean(&|_| {}, &shared, vec![it.id.clone()]);
+    assert!(!report.outcomes[0].ok);
+    assert_eq!(report.outcomes[0].error.as_deref(), Some("On the keep list"));
+}
+
+#[test]
+fn docker_builds_lock_the_build_cache() {
+    use crate::procs::script_tools;
+    let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert!(script_tools("docker", &args(&["docker", "build", "."])).contains(&"docker-build".to_string()));
+    assert!(script_tools("docker", &args(&["docker", "buildx", "bake"])).contains(&"docker-build".to_string()));
+    assert!(script_tools("docker", &args(&["docker", "compose", "up", "--build"])).contains(&"docker-build".to_string()));
+    assert_eq!(script_tools("docker", &args(&["docker", "compose", "up"])), vec!["docker"]);
+}
+
+#[test]
+fn wsl_disks_are_found_in_the_registry_and_estimated() {
+    use crate::wsl::{decode, estimate_frees, parse_df_used, parse_registry};
+    let reg = r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Lxss
+    DefaultDistribution    REG_SZ    {38decfd2}
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Lxss\{06980028}
+    DockerDesktopBuildNumber    REG_SZ    243774
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Lxss\{38decfd2}
+    State    REG_DWORD    0x1
+    DistributionName    REG_SZ    docker-desktop
+    BasePath    REG_SZ    \\?\C:\Users\Jo Doe\AppData\Local\Docker\wsl\main
+    VhdFileName    REG_SZ    ext4.vhdx
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Lxss\{6a0e33b2}
+    DistributionName    REG_SZ    Ubuntu
+    BasePath    REG_SZ    C:\Users\Jo Doe\AppData\Local\Packages\Ubuntu\LocalState
+";
+    assert_eq!(
+        parse_registry(reg),
+        vec![
+            ("docker-desktop".to_string(), r"C:\Users\Jo Doe\AppData\Local\Docker\wsl\main".to_string(), "ext4.vhdx".to_string()),
+            ("Ubuntu".to_string(), r"C:\Users\Jo Doe\AppData\Local\Packages\Ubuntu\LocalState".to_string(), "ext4.vhdx".to_string()),
+        ],
+        "entries without a name or folder are skipped, a missing file name means ext4.vhdx"
+    );
+
+    let utf16: Vec<u8> = "kiri\r\nUbuntu\r\n".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+    assert_eq!(decode(&utf16), "kiri\r\nUbuntu\r\n");
+    assert_eq!(decode(b"kiri\n"), "kiri\n");
+
+    let gnu = "Filesystem     1024-blocks    Used Available Capacity Mounted on\n/dev/sdc        1055762868 4123456 997935672       1% /\n";
+    assert_eq!(parse_df_used(gnu), Some(4_123_456 * 1024));
+    let busybox = "Filesystem           1024-blocks    Used Available Capacity Mounted on\n/dev/sdd             1031987124   3100000 976458772   0% /\n";
+    assert_eq!(parse_df_used(busybox), Some(3_100_000 * 1024));
+    assert_eq!(parse_df_used("garbage"), None);
+
+    let gb = 1024 * 1024 * 1024;
+    assert_eq!(estimate_frees(gb, 2 * gb), 0, "never below zero");
+    let est = estimate_frees(30 * gb, 5 * gb);
+    assert!(est < 25 * gb && est > 24 * gb, "{est}");
+}
+
+#[test]
+fn only_installed_copies_and_appimages_update_themselves() {
+    use crate::updates::{mode_for, Mode};
+    use tauri::utils::config::BundleType;
+    assert_eq!(mode_for(Some(BundleType::Nsis), true, false), Mode::Install, "installed with the setup.exe");
+    assert_eq!(mode_for(Some(BundleType::Nsis), false, false), Mode::Download, "the portable zip has no uninstaller");
+    assert_eq!(mode_for(Some(BundleType::AppImage), false, true), Mode::Install);
+    assert_eq!(mode_for(Some(BundleType::AppImage), false, false), Mode::Download, "AppImage binary run outside its image");
+    assert_eq!(mode_for(Some(BundleType::Deb), false, false), Mode::Download, "apt updates .deb packages");
+    assert_eq!(mode_for(Some(BundleType::Rpm), false, false), Mode::Download);
+    assert_eq!(mode_for(None, true, true), Mode::Download, "a build from source");
+}
+
+#[test]
+fn settings_from_an_older_version_still_load() {
+    use crate::store::Settings;
+    let old: Settings = serde_json::from_str(r#"{"checkUpdates":false}"#).unwrap();
+    assert!(!old.check_updates && old.skipped_version.is_none());
+    let empty: Settings = serde_json::from_str("{}").unwrap();
+    assert!(empty.check_updates, "checking is on unless turned off");
+    let skipped: Settings = serde_json::from_str(r#"{"checkUpdates":true,"skippedVersion":"0.2.0"}"#).unwrap();
+    assert_eq!(skipped.skipped_version.as_deref(), Some("0.2.0"));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_tools_start_from_the_system_folder() {
+    let cmd = crate::command::system("diskpart.exe").unwrap();
+    let program = Path::new(cmd.get_program()).to_path_buf();
+    assert!(program.is_absolute(), "{program:?}");
+    assert!(program.to_string_lossy().to_lowercase().ends_with(r"\system32\diskpart.exe"), "{program:?}");
+    assert_eq!(cmd.get_current_dir(), program.parent());
+}
+
+#[cfg(windows)]
+#[test]
+fn the_diskpart_script_cannot_be_changed_while_it_runs() {
+    let (path, lock) = crate::wsl::locked_script("select vdisk file=\"x\"\nexit\n").unwrap();
+    assert!(fs::write(&path, "clean").is_err(), "writing must fail while locked");
+    assert!(fs::remove_file(&path).is_err(), "deleting must fail while locked");
+    assert!(fs::rename(&path, path.with_extension("old")).is_err(), "renaming must fail while locked");
+    assert!(fs::read_to_string(&path).is_ok(), "diskpart can still read it");
+    drop(lock);
+    fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn programs_are_found_by_full_path_in_absolute_folders_only() {
+    use crate::clean::find_program;
+    let t = fixture("find-program");
+    file(&t.join("first/tool.cmd"), 1);
+    file(&t.join("second/tool.exe"), 1);
+    let dirs = vec![PathBuf::from("first"), t.join("missing"), t.join("first"), t.join("second")];
+    assert_eq!(find_program(&dirs, &["tool.exe", "tool.cmd"]), Some(t.join("first/tool.cmd")), "PATH order wins over name order");
+    assert_eq!(find_program(&dirs[..2], &["tool.cmd"]), None, "a relative folder is never searched");
+    let found = find_program(&dirs, &["tool.exe"]).unwrap();
+    assert!(found.is_absolute());
+    let _ = fs::remove_dir_all(&t);
+}

@@ -3,8 +3,10 @@
 //!
 //! * `keep.json`: folders the user never wants offered
 //! * `last-scan.json`: the result of the last finished scan, shown again on the next start
+//! * `disk-usage.json`: how full each WSL disk was the last time DevSweep could look inside
+//! * `settings.json`: choices made in the window, such as whether to check for updates
 //!
-//! Both are conveniences. A missing or unreadable file is treated as empty.
+//! All are conveniences. A missing or unreadable file is treated as empty.
 
 use crate::scan::Item;
 use serde::{Deserialize, Serialize};
@@ -35,12 +37,49 @@ fn write<T: Serialize>(name: &str, value: &T) -> Result<(), String> {
     fs::rename(&tmp, dir.join(name)).map_err(|e| e.to_string())
 }
 
+/// Choices made in the window that should outlast it.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Settings {
+    /// Ask GitHub for a newer version when DevSweep starts, and once a day while it runs.
+    pub check_updates: bool,
+    /// A version the user chose to skip. The update bar stays away until a newer one is out.
+    pub skipped_version: Option<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { check_updates: true, skipped_version: None }
+    }
+}
+
+pub fn load_settings() -> Settings {
+    read("settings.json").unwrap_or_default()
+}
+
+pub fn save_settings(settings: &Settings) -> Result<(), String> {
+    write("settings.json", settings)
+}
+
 pub fn load_keep() -> Vec<String> {
     read("keep.json").unwrap_or_default()
 }
 
 pub fn save_keep(paths: &[String]) -> Result<(), String> {
     write("keep.json", &paths)
+}
+
+/// Bytes in use inside each WSL disk file and when that was measured, by lower-case path.
+/// Compacting needs WSL stopped, and a stopped disk cannot be looked into, so the number
+/// from a scan while WSL ran is used to estimate what compacting gives back.
+pub type DiskUsage = std::collections::HashMap<String, (u64, i64)>;
+
+pub fn load_disk_usage() -> DiskUsage {
+    read("disk-usage.json").unwrap_or_default()
+}
+
+pub fn save_disk_usage(usage: &DiskUsage) -> Result<(), String> {
+    write("disk-usage.json", usage)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,10 +96,12 @@ pub fn save_scan(roots: &[String], items: &[Item]) -> Result<(), String> {
     write("last-scan.json", &SavedScan { when, roots: roots.to_vec(), items: items.to_vec() })
 }
 
-/// The last saved scan, without the folders that are gone since.
+/// The last saved scan, without the folders that are gone since. Docker and WSL disk rows
+/// are left out too: what they free changes with every container and build, so they are
+/// only shown from a fresh scan.
 pub fn load_scan() -> Option<SavedScan> {
     let mut saved: SavedScan = read("last-scan.json")?;
-    saved.items.retain(|i| Path::new(&i.path).is_dir());
+    saved.items.retain(|i| Path::new(&i.path).is_dir() && !i.action.is_docker());
     Some(saved)
 }
 

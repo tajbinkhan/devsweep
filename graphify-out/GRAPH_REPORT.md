@@ -1,17 +1,16 @@
-# Graph Report - devsweep  (2026-11-18)
+# Graph Report - devsweep  (2026-11-19)
 
 ## Corpus Check
-- 23 files · ~22,248 words
+- 25 files · ~49,659 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 7 file(s) not represented in the graph (top: (none) 2, .xml 2, .icns 1)
 
 ## Summary
-- 459 nodes · 830 edges · 26 communities (22 shown, 4 thin omitted)
-- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 73 edges (avg confidence: 0.83)
+- 548 nodes · 1107 edges · 50 communities (30 shown, 20 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 55 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `09ddda2a`
+- Built from commit: `ef45cc39`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -41,18 +40,42 @@
 - Step 02 Review (unused 30 days, locked in use, Check first)
 - Step 03 Delete (still owned and unused, no links, real space freed)
 - Global package caches cleaning
+- docker.rs
+- rules.rs
+- output
+- elevate.rs
+- component
+- deserialize
+- emitter
+- hashmap
+- instant
+- isterminal
+- path
+- pathbuf
+- processestoupdate
+- processrefreshkind
+- ref_node_assert
+- relaxed
+- seqcst
+- system
+- systemtime
+- updatekind
+- write
+- updater-manifest.mjs
+- Scan, Review, Delete workflow
+- Step 02 Review (unused 30 days, locked in use, Check first)
 
 ## God Nodes (most connected - your core abstractions)
-1. `Item` - 24 edges
-2. `Shared` - 19 edges
-3. `fixture()` - 17 edges
-4. `scan_projects()` - 16 edges
-5. `file()` - 16 edges
-6. `render()` - 12 edges
-7. `remove_dir()` - 11 edges
-8. `run_scan()` - 11 edges
-9. `run_clean()` - 11 edges
-10. `steps` - 10 edges
+1. `Item` - 28 edges
+2. `Shared` - 23 edges
+3. `fixture()` - 19 edges
+4. `file()` - 18 edges
+5. `run_clean()` - 14 edges
+6. `Failure` - 12 edges
+7. `clean()` - 12 edges
+8. `scan()` - 12 edges
+9. `render()` - 12 edges
+10. `remove_dir()` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Hero app logo (scaled three-bar mark)` --semantically_similar_to--> `DevSweep logo (three shrinking bars)`  [INFERRED] [semantically similar]
@@ -61,10 +84,10 @@
   assets/readme/hero.svg → ui/index.html
 - `Step 03 Delete (still owned and unused, no links, real space freed)` --references--> `Reports real free-space change`  [INFERRED]
   assets/readme/workflow.svg → README.md
-- `Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered)` --references--> `Fixed scanner exclusion list`  [INFERRED]
-  assets/readme/hero.svg → README.md
-- `Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered)` --references--> `Project folder ownership rule (project file next to it, marker inside)`  [INFERRED]
-  assets/readme/hero.svg → README.md
+- `Scan, Review, Delete workflow` --references--> `Scan, Review, Delete workflow diagram`  [EXTRACTED]
+  README.md → assets/readme/workflow.svg
+- `Step 02 Review (unused 30 days, locked in use, Check first)` --references--> `Preselect folders unused for N days (default 30)`  [INFERRED]
+  assets/readme/workflow.svg → README.md
 
 ## Import Cycles
 - None detected.
@@ -76,115 +99,143 @@
 - **Deletion dialog sequence** — ui_index_selection_footer, ui_index_confirm_dialog, ui_index_working_dialog, ui_index_report_dialog [INFERRED 0.85]
 - **Scan, Review, Delete user flow** — readme_scan_review_delete_workflow, assets_readme_workflow_scan_step, assets_readme_workflow_review_step, assets_readme_workflow_delete_step, ui_index_where_to_look, ui_index_results_table, ui_index_confirm_dialog [INFERRED 0.85]
 
-## Communities (26 total, 4 thin omitted)
+## Communities (50 total, 20 thin omitted)
 
 ### Community 0 - "Rules and Parallel Scanner"
-Cohesion: 0.08
-Nodes (40): trash_path(), cache_entries(), CacheAction, PnpmPrune, RemoveContents, CacheEntry, DOTNET, GRADLE (+32 more)
+Cohesion: 0.14
+Nodes (28): AtomicU64, DirEntry, fs, prelude, Action, activity_walk(), Group, is_link() (+20 more)
 
 ### Community 1 - "Tauri Commands and Elevation"
-Cohesion: 0.08
-Nodes (45): CAN_ELEVATE, is_elevated(), relaunch_elevated(), wait_for_parent(), app_info(), AppInfo, BusyGuard, cancel() (+37 more)
+Cohesion: 0.12
+Nodes (51): Drop, Emit, Fn, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove() (+43 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
-Cohesion: 0.19
-Nodes (10): cache_entries, CI workflow (ci.yml, Windows and Linux), kondo, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder), ProjectRule / PROJECT_RULES, rules.rs (folder rules, exclusions, cache entries), 29 supported project folder types (+2 more)
-
-### Community 3 - "Release Build Steps"
-Cohesion: 0.05
-Nodes (43): defaults, name, runs-on, steps, strategy, concurrency, cancel-in-progress, group (+35 more)
+Cohesion: 0.33
+Nodes (6): cache_entries, CI workflow (ci.yml, Windows and Linux), ProjectRule / PROJECT_RULES, rules.rs (folder rules, exclusions, cache entries), 29 supported project folder types, tests.rs (fake-project tests)
 
 ### Community 4 - "CI Workflow Config"
-Cohesion: 0.07
-Nodes (26): jobs, test, os, name, on, pull_request, push, workflow_dispatch (+18 more)
+Cohesion: 0.17
+Nodes (27): File, Output, the_diskpart_script_cannot_be_changed_while_it_runs(), wsl_disks_are_found_in_the_registry_and_estimated(), compact(), decode(), Disk, diskpart() (+19 more)
 
 ### Community 5 - "Frontend UI Logic"
-Cohesion: 0.15
-Nodes (24): ageTitle(), applyPlatformText(), esc(), fileManager(), isWindows(), keepPath(), projectName(), render() (+16 more)
+Cohesion: 0.14
+Nodes (26): ageTitle(), applyPlatformText(), checkForUpdate(), esc(), fileManager(), isWindows(), keepPath(), projectName() (+18 more)
 
 ### Community 6 - "Safe Deletion Guards"
-Cohesion: 0.15
-Nodes (19): clear_readonly(), denied(), Failure, guard(), is_dir_link(), is_reparse(), make_removable(), pnpm_program() (+11 more)
+Cohesion: 0.19
+Nodes (28): Error, From, clear_readonly(), denied(), Failure, find_program(), guard(), is_dir_link() (+20 more)
 
 ### Community 7 - "Fixture Test Suite"
-Cohesion: 0.18
-Nodes (25): access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again(), deletes_without_following_junctions_and_clears_read_only(), export_writes_csv_with_quoting_and_json(), file() (+17 more)
+Cohesion: 0.11
+Nodes (34): atomicbool, a_kept_docker_row_is_refused_without_running_docker(), access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again(), deletes_without_following_junctions_and_clears_read_only() (+26 more)
 
 ### Community 8 - "Tauri App Config"
-Cohesion: 0.12
-Nodes (15): app, security, windows, withGlobalTauri, build, frontendDist, bundle, active (+7 more)
+Cohesion: 0.07
+Nodes (29): https://github.com/tajbinkhan/devsweep/releases/latest/download/latest.json, icons/128x128@2x.png, icons/128x128.png, icons/32x32.png, icons/icon.icns, icons/icon.ico, nsis, app (+21 more)
 
 ### Community 9 - "procs.rs"
-Cohesion: 0.12
-Nodes (11): CACHE_COMMANDS, DEV_TOOLS, norm(), PACKAGE_MANAGERS, script_tools(), SCRIPT_TOOLS, stem(), subcommand() (+3 more)
+Cohesion: 0.33
+Nodes (14): S, norm(), Proc, Option, Path, String, Vec, running_dev_tools() (+6 more)
 
 ### Community 10 - "App Screenshot UI"
 Cohesion: 0.22
-Nodes (13): DevSweep App Screenshot, Detected Artifact Types (Rust target, Python .venv, CMake build, Node node_modules, Flutter build, Next.js .next), Selection Summary and Delete Selected Footer, Drive Free Space Meters (C:, D:, F:), Filter, Select Unused For N Days, Clear Selection, Include Global Package Caches Toggle, Last Changed Age Highlight, DevSweep Main Window (dark theme) (+5 more)
+Nodes (14): DevSweep App Screenshot, Detected Artifact Types (Rust target, Python .venv, CMake build, Node node_modules, Flutter build, Next.js .next), Selection Summary and Delete Selected Footer, Drive Free Space Meters (C:, D:, F:), Filter, Select Unused For N Days, Clear Selection, How It Comes Back Recovery Badges, Include Global Package Caches Toggle, Last Changed Age Highlight (+6 more)
 
 ### Community 11 - "cli.rs"
-Cohesion: 0.09
-Nodes (31): age_days(), attach_console(), days(), execute(), fmt_age(), fmt_bytes(), folders(), now() (+23 more)
+Cohesion: 0.14
+Nodes (27): arc, io, age_days(), attach_console(), days(), execute(), fmt_age(), fmt_bytes() (+19 more)
 
 ### Community 12 - "npm Package Manifest"
-Cohesion: 0.18
-Nodes (11): description, devDependencies, @tauri-apps/cli@^2.12.4, name, private, scripts, build, dev (+3 more)
+Cohesion: 0.17
+Nodes (11): description, devDependencies, @tauri-apps/cli, name, private, scripts, build, dev (+3 more)
 
 ### Community 13 - "Delete Dialogs and Privileges"
-Cohesion: 0.20
-Nodes (7): chown command hint for root-owned folders (Linux), Restart as administrator (Windows UAC), Administrator badge, Delete confirmation dialog, Report dialog (failures, admin note, Restart as administrator), Selection footer with Delete selected, Deleting progress dialog
+Cohesion: 0.29
+Nodes (7): chown command hint for root-owned folders (Linux), Reports real free-space change, Restart as administrator (Windows UAC), Runs as normal user, never self-elevates, Administrator badge, Report dialog (failures, admin note, Restart as administrator), Deleting progress dialog
 
 ### Community 14 - "Linux Bundle Config"
-Cohesion: 0.29
-Nodes (6): bundle, category, longDescription, shortDescription, targets, $schema
+Cohesion: 0.20
+Nodes (9): appimage, deb, rpm, bundle, category, longDescription, shortDescription, targets (+1 more)
 
 ### Community 15 - "App Icon Design"
 Cohesion: 0.40
-Nodes (5): DevSweep App Icon (master source), Rounded-square tile with dark teal-to-deep-green diagonal gradient, Three left-aligned pill bars of decreasing length (muted sage, off-white, bright mint), Generated Tauri icon set (src-tauri/icons/*), Palette: deep teal/green background, sage, off-white mint, bright mint accent
+Nodes (6): DevSweep App Icon (master source), Symbolism: shrinking disk usage / space reclaimed by sweeping caches, Rounded-square tile with dark teal-to-deep-green diagonal gradient, Three left-aligned pill bars of decreasing length (muted sage, off-white, bright mint), Generated Tauri icon set (src-tauri/icons/*), Palette: deep teal/green background, sage, off-white mint, bright mint accent
 
 ### Community 16 - "Tauri Capabilities"
-Cohesion: 0.33
-Nodes (5): description, identifier, permissions, $schema, windows
+Cohesion: 0.18
+Nodes (10): core:default, dialog:allow-open, dialog:allow-save, main, opener:allow-reveal-item-in-dir, description, identifier, permissions (+2 more)
+
+### Community 20 - "Package Root"
+Cohesion: 0.16
+Nodes (28): Default, DiskUsage, get_settings(), Item, csv_field(), dir(), export(), load_disk_usage() (+20 more)
 
 ### Community 21 - "logic.js"
-Cohesion: 0.17
-Nodes (8): assert, daysAgo(), item(), test, ageDays(), picksUnused(), rangeIds(), selectable()
+Cohesion: 0.12
+Nodes (15): ref_node_test, assert, daysAgo(), item(), L, test, ageDays(), downloadLabel() (+7 more)
 
 ### Community 22 - "DevSweep"
 Cohesion: 0.20
-Nodes (10): 63 GB of 100 GB drive was Rust target stat bar, DevSweep README hero image, DevSweep, main.rs (Tauri commands), Native clean commands (cargo clean, npm cache clean), npkill, Storage Sense, Disk Cleanup, Tauri 2 (Rust backend + plain HTML/CSS/JS UI) (+2 more)
+Nodes (11): 63 GB of 100 GB drive was Rust target stat bar, DevSweep README hero image, DevSweep, main.rs (Tauri commands), Native clean commands (cargo clean, npm cache clean), npkill, Storage Sense, Disk Cleanup, Tauri 2 (Rust backend + plain HTML/CSS/JS UI) (+3 more)
 
 ### Community 23 - "Step 02 Review (unused 30 days, locked in use, Check first)"
-Cohesion: 0.24
-Nodes (9): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 02 Review (unused 30 days, locked in use, Check first), Step 01 Scan (project file, build marker, skips installed apps), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30), Results table (Size, Folder, Type, Last changed, How it comes back) (+1 more)
+Cohesion: 0.28
+Nodes (9): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 01 Scan (project file, build marker, skips installed apps), Fixed scanner exclusion list, kondo, Project folder ownership rule (project file next to it, marker inside), Empty state safety rules list (+1 more)
 
 ### Community 24 - "Step 03 Delete (still owned and unused, no links, real space freed)"
 Cohesion: 0.50
-Nodes (3): Step 03 Delete (still owned and unused, no links, real space freed), clean.rs (deletion and last-chance checks), scan.rs (parallel walk and sizing)
+Nodes (5): Step 03 Delete (still owned and unused, no links, real space freed), clean.rs (deletion and last-chance checks), Never follows symlinks or junctions, Re-check before delete (last-chance path checks), scan.rs (parallel walk and sizing)
 
 ### Community 25 - "Global package caches cleaning"
 Cohesion: 0.40
 Nodes (5): Global package caches cleaning, pnpm store prune, Project folders / Global caches tabs, Scan progress bar with Cancel, Where to look section (roots, Add folder, Scan, include caches)
 
+### Community 26 - "docker.rs"
+Cohesion: 0.20
+Nodes (23): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+15 more)
+
+### Community 27 - "rules.rs"
+Cohesion: 0.23
+Nodes (15): cache_entries(), CacheAction, CacheEntry, has_entry(), is_candidate_name(), is_trash_name(), match_project(), never_enter_paths() (+7 more)
+
+### Community 28 - "output"
+Cohesion: 0.21
+Nodes (18): BundleType, serialize, check_update(), install_update(), Mode, mode_for(), open_releases_page(), Pending (+10 more)
+
+### Community 29 - "elevate.rs"
+Cohesion: 0.33
+Nodes (3): relaunch_elevated(), Result, String
+
+### Community 47 - "updater-manifest.mjs"
+Cohesion: 0.29
+Nodes (5): [dist, version, tag, repo, out], files, linux, manifest, windows
+
+### Community 48 - "Scan, Review, Delete workflow"
+Cohesion: 0.33
+Nodes (6): Permanent deletion (no Recycle Bin), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30), Delete confirmation dialog, Select unused for N days control, Selection footer with Delete selected
+
+### Community 49 - "Step 02 Review (unused 30 days, locked in use, Check first)"
+Cohesion: 0.40
+Nodes (5): Step 02 Review (unused 30 days, locked in use, Check first), Check first marking (venv, PHP vendor), In-use folder locking, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder)
+
 ## Knowledge Gaps
-- **29 isolated node(s):** `devsweep`, `Safe`, `Reinstall`, `Caution`, `RemoveContents` (+24 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 157 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **72 isolated node(s):** `[dist, version, tag, repo, out]`, `files`, `windows`, `linux`, `manifest` (+67 more)
+  These have ≤1 connection - possible missing edges or undocumented components.
+- **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.151) - this node is a cross-community bridge._
-- **Are the 3 inferred relationships involving `Item` (e.g. with `rel()` and `scan_all()`) actually correct?**
-  _`Item` has 3 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `devsweep`, `Safe`, `Reinstall` to the rest of the system?**
-  _29 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _High betweenness centrality (0.141) - this node is a cross-community bridge._
+- **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
+  _High betweenness centrality (0.128) - this node is a cross-community bridge._
+- **What connects `[dist, version, tag, repo, out]`, `files`, `windows` to the rest of the system?**
+  _72 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
-  _Cohesion score 0.07767722473604827 - nodes in this community are weakly interconnected._
-- **Why does `cache_entries()` connect `Rules and Parallel Scanner` to `Release Build Steps`?**
-  _High betweenness centrality (0.146) - this node is a cross-community bridge._
+  _Cohesion score 0.14112903225806453 - nodes in this community are weakly interconnected._
 - **Should `Tauri Commands and Elevation` be split into smaller, more focused modules?**
-  _Cohesion score 0.07832080200501253 - nodes in this community are weakly interconnected._
-- **Should `Release Build Steps` be split into smaller, more focused modules?**
-  _Cohesion score 0.045454545454545456 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.12336719883889695 - nodes in this community are weakly interconnected._
+- **Should `Frontend UI Logic` be split into smaller, more focused modules?**
+  _Cohesion score 0.14039408866995073 - nodes in this community are weakly interconnected._
+- **Should `Fixture Test Suite` be split into smaller, more focused modules?**
+  _Cohesion score 0.11149825783972125 - nodes in this community are weakly interconnected._

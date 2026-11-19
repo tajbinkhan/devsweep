@@ -3,6 +3,8 @@
 
 mod clean;
 mod cli;
+mod command;
+mod docker;
 mod elevate;
 mod procs;
 mod rules;
@@ -10,6 +12,8 @@ mod scan;
 mod store;
 #[cfg(test)]
 mod tests;
+mod updates;
+mod wsl;
 
 use scan::{Action, Group, Item, Progress};
 use serde::Serialize;
@@ -186,6 +190,8 @@ pub struct ScanResult {
     pub cancelled: bool,
     pub missing_roots: Vec<String>,
     pub running_tools: Vec<String>,
+    /// Things worth telling the user about the scan, such as Docker refusing DevSweep.
+    pub notes: Vec<String>,
 }
 
 pub type Emit<T> = Arc<dyn Fn(T) + Send + Sync>;
@@ -249,9 +255,33 @@ pub fn run_scan(emit: Emit<ScanProgress>, shared: &Arc<Shared>, roots: Vec<Strin
     let mut items = scan::scan_projects(&roots, &shared.cancel, &progress);
     *phase.lock().unwrap() = "sizes".into();
 
+    let mut notes = Vec::new();
     if include_caches && !shared.cancel.load(SeqCst) {
         *phase.lock().unwrap() = "caches".into();
         items.extend(scan::scan_caches(&roots, &shared.cancel));
+
+        let now = cli::now();
+        let mut desktop_used = None;
+        if !shared.cancel.load(SeqCst) {
+            *phase.lock().unwrap() = "docker".into();
+            match docker::engine() {
+                Ok(Some(engine)) => {
+                    let (found, stored) = docker::scan(&engine, now);
+                    items.extend(found);
+                    if engine.os == "Docker Desktop" {
+                        desktop_used = Some(stored);
+                    }
+                }
+                Ok(None) => {}
+                Err(note) => notes.push(note),
+            }
+        }
+        if cfg!(windows) && !shared.cancel.load(SeqCst) {
+            *phase.lock().unwrap() = "wsl".into();
+            let mut usage = store::load_disk_usage();
+            items.extend(wsl::scan(desktop_used, &mut usage, now));
+            let _ = store::save_disk_usage(&usage);
+        }
     }
 
     *phase.lock().unwrap() = "processes".into();
@@ -271,6 +301,7 @@ pub fn run_scan(emit: Emit<ScanProgress>, shared: &Arc<Shared>, roots: Vec<Strin
         cancelled: shared.cancel.load(SeqCst),
         missing_roots: missing.iter().map(|p| p.display().to_string()).collect(),
         running_tools: procs::running_dev_tools(&procs),
+        notes,
         items,
     }
 }
@@ -310,6 +341,9 @@ pub struct CleanReport {
     pub counted_bytes: u64,
     /// Change in free space on the affected drives. Lower than counted when files were hard links.
     pub measured_bytes: i64,
+    /// Part of `counted_bytes` freed inside a virtual machine's disk (Docker Desktop, Docker
+    /// on WSL). It reaches the drive only after that disk is compacted.
+    pub vm_bytes: u64,
     pub cancelled: bool,
 }
 
@@ -359,12 +393,20 @@ fn save_remaining(shared: &Shared) {
 const PROCESS_REFRESH: Duration = Duration::from_secs(3);
 
 pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String>) -> CleanReport {
-    let known: Vec<Option<Item>> = {
+    let mut work: Vec<(String, Option<Item>)> = {
         let map = shared.items.lock().unwrap();
-        ids.iter().map(|id| map.get(id).cloned()).collect()
+        ids.into_iter().map(|id| { let item = map.get(&id).cloned(); (id, item) }).collect()
     };
+    // Compacting a disk comes last, after Docker has freed what it can inside that disk.
+    work.sort_by_key(|(_, i)| i.as_ref().is_some_and(|i| i.action == Action::CompactDisk));
     let all = mounts();
-    let mut mounts: Vec<String> = known.iter().flatten().map(|i| drive_of(&i.path, &all)).collect();
+    let mut mounts: Vec<String> = work
+        .iter()
+        .filter_map(|(_, i)| i.as_ref())
+        .filter(|i| !i.in_vm)
+        .map(|i| drive_of(i.space_on.as_deref().unwrap_or(&i.path), &all))
+        .filter(|m| !m.is_empty())
+        .collect();
     mounts.sort();
     mounts.dedup();
     let before = free_space(&mounts);
@@ -372,9 +414,10 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
     let mut looked = Instant::now();
     let keep = shared.keep.lock().unwrap().clone();
 
-    let total = ids.len();
+    let total = work.len();
     let mut outcomes = Vec::with_capacity(total);
-    for (n, (id, item)) in ids.iter().zip(known).enumerate() {
+    let mut vm_bytes = 0;
+    for (n, (id, item)) in work.into_iter().enumerate() {
         if shared.cancel.load(SeqCst) {
             break;
         }
@@ -403,6 +446,9 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
         };
         if result.is_ok() {
             shared.items.lock().unwrap().remove(&item.id);
+            if item.in_vm {
+                vm_bytes += item.frees;
+            }
         }
         outcomes.push(Outcome {
             id: item.id.clone(),
@@ -420,6 +466,7 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
     CleanReport {
         counted_bytes: outcomes.iter().filter(|o| o.ok).map(|o| o.bytes).sum(),
         measured_bytes: after - before,
+        vm_bytes,
         cancelled: shared.cancel.load(SeqCst),
         outcomes,
     }
@@ -428,6 +475,14 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
 /// Re-checks everything that made the folder safe at scan time, then removes it.
 fn check_and_remove(item: &Item, procs: &[procs::Proc]) -> Result<(), clean::Failure> {
     let path = Path::new(&item.path);
+    if let Some(kind) = docker::kind_of(item.action) {
+        // `path` is the command shown in the list. Docker re-checks what is in use itself.
+        let users = users(item, procs);
+        if !users.is_empty() {
+            return Err(format!("In use by {}", users.join(", ")).into());
+        }
+        return docker::prune(kind);
+    }
     if !path.exists() {
         return Err("Already gone".into());
     }
@@ -445,6 +500,10 @@ fn check_and_remove(item: &Item, procs: &[procs::Proc]) -> Result<(), clean::Fai
         Action::RemoveDir => clean::remove_dir(path),
         Action::RemoveContents => clean::remove_contents(path),
         Action::PnpmPrune => clean::pnpm_prune(path).map_err(Into::into),
+        Action::CompactDisk => wsl::compact(path),
+        Action::DockerBuildCache | Action::DockerImages | Action::DockerContainers | Action::DockerVolumes => {
+            unreachable!("handled above")
+        }
     }
 }
 
@@ -458,16 +517,32 @@ struct AppInfo {
     platform: &'static str,
     /// Whether "Restart as administrator" is offered. Only Windows has a way to do it safely.
     can_elevate: bool,
+    /// This build's version, from the release tag.
+    version: String,
+    /// Whether an update can install itself or only be downloaded by hand.
+    update_mode: updates::Mode,
 }
 
 #[tauri::command]
-fn app_info() -> AppInfo {
+fn app_info(app: AppHandle) -> AppInfo {
     AppInfo {
         elevated: elevate::is_elevated(),
         auto_scan: std::env::args().any(|a| a == "--scan"),
         platform: std::env::consts::OS,
         can_elevate: elevate::CAN_ELEVATE,
+        version: app.package_info().version.to_string(),
+        update_mode: updates::mode(),
     }
+}
+
+#[tauri::command]
+fn get_settings() -> store::Settings {
+    store::load_settings()
+}
+
+#[tauri::command]
+fn set_settings(settings: store::Settings) -> Result<(), String> {
+    store::save_settings(&settings)
 }
 
 #[tauri::command]
@@ -551,7 +626,9 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(shared))
+        .manage(updates::Pending::default())
         .invoke_handler(tauri::generate_handler![
             list_drives,
             default_roots,
@@ -563,7 +640,12 @@ fn main() {
             set_keep,
             last_scan,
             export,
-            restart_as_admin
+            restart_as_admin,
+            get_settings,
+            set_settings,
+            updates::check_update,
+            updates::install_update,
+            updates::open_releases_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevSweep");

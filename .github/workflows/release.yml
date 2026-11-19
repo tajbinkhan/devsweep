@@ -9,6 +9,10 @@ name: Release
 #
 # Only the publish job can change the release. The build job runs third-party actions and
 # project dependencies, so it gets a read-only token and hands its files over as artifacts.
+#
+# Installed copies of DevSweep update themselves from latest.json, which the sign job writes
+# and the publish job uploads last. Signing needs the TAURI_SIGNING_PRIVATE_KEY secret (and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD when the key has a password).
 
 on:
   release:
@@ -120,10 +124,69 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Signs the downloads that update themselves (the Windows installer and the AppImage) and
+  # writes latest.json, which installed copies of DevSweep read to find the new version. The
+  # signing key lives only in this job, which runs the Tauri CLI and nothing else, not in the
+  # build job, which runs every crate's build script.
+  sign:
+    name: Sign updates
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the Tauri CLI
+        run: npm ci
+
+      - name: Fetch the built downloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DevSweep-*
+          path: dist
+          merge-multiple: true
+
+      - name: Sign the installer and the AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing, so installed copies could not update."
+            exit 1
+          fi
+          for f in dist/*-setup.exe dist/*.AppImage; do
+            # The version goes into the signature, so a manifest cannot pass an old download off as new.
+            npx tauri signer sign --app-version "${TAG#v}" "$f"
+          done
+
+      - name: Write latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          export RELEASE_NOTES="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          export RELEASE_DATE="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq .publishedAt)"
+          mkdir -p updater
+          node .github/scripts/updater-manifest.mjs dist "${TAG#v}" "$TAG" "$GITHUB_REPOSITORY" updater/latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: updater
+          path: updater/latest.json
+          if-no-files-found: error
+
   publish:
     name: Publish downloads
-    # Runs only after every platform has built, so a release never gets a partial set of files.
-    needs: build
+    # Runs only after every platform has built and the updates are signed, so a release never
+    # gets a partial set of files.
+    needs: [build, sign]
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
@@ -136,8 +199,21 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Fetch latest.json
+        uses: actions/download-artifact@v4
+        with:
+          name: updater
+          path: updater
+
       - name: Attach downloads to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+      # Last, so installed copies only hear about the release once its downloads are there.
+      - name: Announce the release to installed copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" updater/latest.json --clobber --repo "$GITHUB_REPOSITORY"

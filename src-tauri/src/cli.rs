@@ -26,7 +26,9 @@ Usage:
 With no FOLDER, DevSweep scans your home folder and every drive except the system one.
 
 Options:
-  --caches            Include global package caches (npm, Cargo, Gradle and others)
+  --caches            Include global package caches (npm, Cargo, Gradle and others),
+                      Docker's build cache, images, containers and volumes, and on
+                      Windows the WSL disks that compacting can shrink
   --older-than DAYS   Only pick folders unused for at least this many days (default 30, 0 for any)
   --include-caution   Also pick folders marked \"Check first\" (Python environments, PHP vendor)
   --dry-run           clean: show what would be deleted, delete nothing
@@ -117,7 +119,7 @@ fn days(v: &str) -> Result<u64, String> {
         .map_err(|_| format!("--older-than wants a number of days, not {v:?}"))
 }
 
-fn now() -> i64 {
+pub fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
 }
 
@@ -149,6 +151,8 @@ fn execute(mut o: Options) -> i32 {
             let line = match p.phase.as_str() {
                 "folders" if p.to_size == 0 => format!("{} folders checked, {} found", p.dirs, p.found),
                 "caches" => "Measuring package caches".to_string(),
+                "docker" => "Asking Docker what it can free".to_string(),
+                "wsl" => "Measuring WSL disks".to_string(),
                 "processes" => "Checking running programs".to_string(),
                 _ => format!("Measuring {} of {}", p.sized, p.to_size),
             };
@@ -161,6 +165,9 @@ fn execute(mut o: Options) -> i32 {
     }
     for root in &result.missing_roots {
         eprintln!("devsweep: not found: {root}");
+    }
+    for note in &result.notes {
+        eprintln!("devsweep: {note}");
     }
 
     let now = now();
@@ -264,7 +271,8 @@ fn print_table(items: &[&Item], o: &Options, now: i64) {
         println!(
             "{:>10}  {:<14}  {:<12}  {}{status}",
             fmt_bytes(i.frees),
-            fmt_age(age_days(i, now)),
+            // Docker does not record when an image or cache entry was last used.
+            if i.action.is_docker() { "not tracked".to_string() } else { fmt_age(age_days(i, now)) },
             i.ecosystem,
             i.path
         );
