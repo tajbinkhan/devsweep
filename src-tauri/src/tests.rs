@@ -763,3 +763,17 @@ fn the_diskpart_script_cannot_be_changed_while_it_runs() {
     drop(lock);
     fs::remove_file(&path).unwrap();
 }
+
+#[test]
+fn programs_are_found_by_full_path_in_absolute_folders_only() {
+    use crate::clean::find_program;
+    let t = fixture("find-program");
+    file(&t.join("first/tool.cmd"), 1);
+    file(&t.join("second/tool.exe"), 1);
+    let dirs = vec![PathBuf::from("first"), t.join("missing"), t.join("first"), t.join("second")];
+    assert_eq!(find_program(&dirs, &["tool.exe", "tool.cmd"]), Some(t.join("first/tool.cmd")), "PATH order wins over name order");
+    assert_eq!(find_program(&dirs[..2], &["tool.cmd"]), None, "a relative folder is never searched");
+    let found = find_program(&dirs, &["tool.exe"]).unwrap();
+    assert!(found.is_absolute());
+    let _ = fs::remove_dir_all(&t);
+}

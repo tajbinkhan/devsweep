@@ -1,16 +1,16 @@
 # Graph Report - devsweep  (2026-11-19)
 
 ## Corpus Check
-- 25 files · ~49,454 words
+- 25 files · ~49,659 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 546 nodes · 1098 edges · 48 communities (28 shown, 20 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 54 edges (avg confidence: 0.86)
+- 548 nodes · 1107 edges · 50 communities (30 shown, 20 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 55 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c61af5a6`
+- Built from commit: `ef45cc39`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -62,12 +62,14 @@
 - updatekind
 - write
 - updater-manifest.mjs
+- Scan, Review, Delete workflow
+- Step 02 Review (unused 30 days, locked in use, Check first)
 
 ## God Nodes (most connected - your core abstractions)
 1. `Item` - 28 edges
 2. `Shared` - 23 edges
-3. `fixture()` - 18 edges
-4. `file()` - 17 edges
+3. `fixture()` - 19 edges
+4. `file()` - 18 edges
 5. `run_clean()` - 14 edges
 6. `Failure` - 12 edges
 7. `clean()` - 12 edges
@@ -82,9 +84,9 @@
   assets/readme/hero.svg → ui/index.html
 - `Step 03 Delete (still owned and unused, no links, real space freed)` --references--> `Reports real free-space change`  [INFERRED]
   assets/readme/workflow.svg → README.md
-- `Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered)` --references--> `Fixed scanner exclusion list`  [INFERRED]
-  assets/readme/hero.svg → README.md
-- `Step 01 Scan (project file, build marker, skips installed apps)` --references--> `Fixed scanner exclusion list`  [INFERRED]
+- `Scan, Review, Delete workflow` --references--> `Scan, Review, Delete workflow diagram`  [EXTRACTED]
+  README.md → assets/readme/workflow.svg
+- `Step 02 Review (unused 30 days, locked in use, Check first)` --references--> `Preselect folders unused for N days (default 30)`  [INFERRED]
   assets/readme/workflow.svg → README.md
 
 ## Import Cycles
@@ -97,7 +99,7 @@
 - **Deletion dialog sequence** — ui_index_selection_footer, ui_index_confirm_dialog, ui_index_working_dialog, ui_index_report_dialog [INFERRED 0.85]
 - **Scan, Review, Delete user flow** — readme_scan_review_delete_workflow, assets_readme_workflow_scan_step, assets_readme_workflow_review_step, assets_readme_workflow_delete_step, ui_index_where_to_look, ui_index_results_table, ui_index_confirm_dialog [INFERRED 0.85]
 
-## Communities (48 total, 20 thin omitted)
+## Communities (50 total, 20 thin omitted)
 
 ### Community 0 - "Rules and Parallel Scanner"
 Cohesion: 0.14
@@ -108,12 +110,12 @@ Cohesion: 0.12
 Nodes (51): Drop, Emit, Fn, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove() (+43 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
-Cohesion: 0.19
-Nodes (13): cache_entries, CI workflow (ci.yml, Windows and Linux), Fixed scanner exclusion list, In-use folder locking, kondo, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder), Project folder ownership rule (project file next to it, marker inside) (+5 more)
+Cohesion: 0.33
+Nodes (6): cache_entries, CI workflow (ci.yml, Windows and Linux), ProjectRule / PROJECT_RULES, rules.rs (folder rules, exclusions, cache entries), 29 supported project folder types, tests.rs (fake-project tests)
 
 ### Community 4 - "CI Workflow Config"
-Cohesion: 0.18
-Nodes (26): File, Output, the_diskpart_script_cannot_be_changed_while_it_runs(), compact(), decode(), Disk, diskpart(), disks() (+18 more)
+Cohesion: 0.17
+Nodes (27): File, Output, the_diskpart_script_cannot_be_changed_while_it_runs(), wsl_disks_are_found_in_the_registry_and_estimated(), compact(), decode(), Disk, diskpart() (+19 more)
 
 ### Community 5 - "Frontend UI Logic"
 Cohesion: 0.14
@@ -121,19 +123,19 @@ Nodes (26): ageTitle(), applyPlatformText(), checkForUpdate(), esc(), fileManage
 
 ### Community 6 - "Safe Deletion Guards"
 Cohesion: 0.19
-Nodes (27): Error, From, clear_readonly(), denied(), Failure, guard(), is_dir_link(), is_reparse() (+19 more)
+Nodes (28): Error, From, clear_readonly(), denied(), Failure, find_program(), guard(), is_dir_link() (+20 more)
 
 ### Community 7 - "Fixture Test Suite"
 Cohesion: 0.11
-Nodes (34): atomicbool, access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again(), deletes_without_following_junctions_and_clears_read_only(), export_writes_csv_with_quoting_and_json() (+26 more)
+Nodes (34): atomicbool, a_kept_docker_row_is_refused_without_running_docker(), access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again(), deletes_without_following_junctions_and_clears_read_only() (+26 more)
 
 ### Community 8 - "Tauri App Config"
 Cohesion: 0.07
 Nodes (29): https://github.com/tajbinkhan/devsweep/releases/latest/download/latest.json, icons/128x128@2x.png, icons/128x128.png, icons/32x32.png, icons/icon.icns, icons/icon.ico, nsis, app (+21 more)
 
 ### Community 9 - "procs.rs"
-Cohesion: 0.37
-Nodes (13): S, norm(), Proc, Option, Path, String, Vec, running_dev_tools() (+5 more)
+Cohesion: 0.33
+Nodes (14): S, norm(), Proc, Option, Path, String, Vec, running_dev_tools() (+6 more)
 
 ### Community 10 - "App Screenshot UI"
 Cohesion: 0.22
@@ -148,8 +150,8 @@ Cohesion: 0.17
 Nodes (11): description, devDependencies, @tauri-apps/cli, name, private, scripts, build, dev (+3 more)
 
 ### Community 13 - "Delete Dialogs and Privileges"
-Cohesion: 0.20
-Nodes (10): chown command hint for root-owned folders (Linux), Permanent deletion (no Recycle Bin), Reports real free-space change, Restart as administrator (Windows UAC), Runs as normal user, never self-elevates, Administrator badge, Delete confirmation dialog, Report dialog (failures, admin note, Restart as administrator) (+2 more)
+Cohesion: 0.29
+Nodes (7): chown command hint for root-owned folders (Linux), Reports real free-space change, Restart as administrator (Windows UAC), Runs as normal user, never self-elevates, Administrator badge, Report dialog (failures, admin note, Restart as administrator), Deleting progress dialog
 
 ### Community 14 - "Linux Bundle Config"
 Cohesion: 0.20
@@ -176,8 +178,8 @@ Cohesion: 0.20
 Nodes (11): 63 GB of 100 GB drive was Rust target stat bar, DevSweep README hero image, DevSweep, main.rs (Tauri commands), Native clean commands (cargo clean, npm cache clean), npkill, Storage Sense, Disk Cleanup, Tauri 2 (Rust backend + plain HTML/CSS/JS UI) (+3 more)
 
 ### Community 23 - "Step 02 Review (unused 30 days, locked in use, Check first)"
-Cohesion: 0.24
-Nodes (10): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 02 Review (unused 30 days, locked in use, Check first), Step 01 Scan (project file, build marker, skips installed apps), Check first marking (venv, PHP vendor), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30) (+2 more)
+Cohesion: 0.28
+Nodes (9): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 01 Scan (project file, build marker, skips installed apps), Fixed scanner exclusion list, kondo, Project folder ownership rule (project file next to it, marker inside), Empty state safety rules list (+1 more)
 
 ### Community 24 - "Step 03 Delete (still owned and unused, no links, real space freed)"
 Cohesion: 0.50
@@ -188,8 +190,8 @@ Cohesion: 0.40
 Nodes (5): Global package caches cleaning, pnpm store prune, Project folders / Global caches tabs, Scan progress bar with Cancel, Where to look section (roots, Add folder, Scan, include caches)
 
 ### Community 26 - "docker.rs"
-Cohesion: 0.19
-Nodes (24): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+16 more)
+Cohesion: 0.20
+Nodes (23): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+15 more)
 
 ### Community 27 - "rules.rs"
 Cohesion: 0.23
@@ -206,6 +208,14 @@ Nodes (3): relaunch_elevated(), Result, String
 ### Community 47 - "updater-manifest.mjs"
 Cohesion: 0.29
 Nodes (5): [dist, version, tag, repo, out], files, linux, manifest, windows
+
+### Community 48 - "Scan, Review, Delete workflow"
+Cohesion: 0.33
+Nodes (6): Permanent deletion (no Recycle Bin), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30), Delete confirmation dialog, Select unused for N days control, Selection footer with Delete selected
+
+### Community 49 - "Step 02 Review (unused 30 days, locked in use, Check first)"
+Cohesion: 0.40
+Nodes (5): Step 02 Review (unused 30 days, locked in use, Check first), Check first marking (venv, PHP vendor), In-use folder locking, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder)
 
 ## Knowledge Gaps
 - **72 isolated node(s):** `[dist, version, tag, repo, out]`, `files`, `windows`, `linux`, `manifest` (+67 more)
@@ -228,4 +238,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Frontend UI Logic` be split into smaller, more focused modules?**
   _Cohesion score 0.14039408866995073 - nodes in this community are weakly interconnected._
 - **Should `Fixture Test Suite` be split into smaller, more focused modules?**
-  _Cohesion score 0.10801393728222997 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11149825783972125 - nodes in this community are weakly interconnected._

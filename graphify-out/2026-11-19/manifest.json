@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/tests.rs": {
-    "mtime": 1795077091.007707,
-    "ast_hash": "8364b8f0f2677a340a9a08752c923be5",
+    "mtime": 1795077413.8328702,
+    "ast_hash": "de259507a652cbed33ae733b8dd8bbe2",
     "semantic_hash": ""
   },
   "src-tauri/tauri.conf.json": {
@@ -375,18 +375,18 @@
     "semantic_hash": ""
   },
   "src-tauri/src/command.rs": {
-    "mtime": 1795062248.5180335,
-    "ast_hash": "165b00c55e3bc520dbd7607b5ffd354e",
+    "mtime": 1795077320.6184907,
+    "ast_hash": "35c51d971145784c44e409603e018e3a",
     "semantic_hash": ""
   },
   "src-tauri/src/docker.rs": {
-    "mtime": 1795062282.8726792,
-    "ast_hash": "808fd52917dc66822646e38c31cc599d",
+    "mtime": 1795077367.4305124,
+    "ast_hash": "60dc22e68474f15c358009cb3bc63e0e",
     "semantic_hash": ""
   },
   "src-tauri/src/wsl.rs": {
-    "mtime": 1795062825.529225,
-    "ast_hash": "15050bb95d1e87f8753cae3f39d985d4",
+    "mtime": 1795077426.042973,
+    "ast_hash": "c77ffa09643037ab0ca6c15604af5d4e",
     "semantic_hash": ""
   },
   ".github/scripts/updater-manifest.mjs": {
