@@ -16,12 +16,24 @@
         <rect x="7" y="20" width="7" height="4" rx="2" fill="var(--accent)" />
       </svg>
       <div>
-        <h1>DevSweep <span class="admin-badge" id="admin-badge" hidden>Administrator</span></h1>
+        <h1>DevSweep <button class="version" id="about-open" type="button" title="About DevSweep and updates"></button> <span class="admin-badge" id="admin-badge" hidden>Administrator</span></h1>
         <p class="tagline">Removes build output and package caches that your tools can rebuild</p>
       </div>
     </div>
     <div class="drives" id="drives" aria-label="Drives"></div>
   </header>
+
+  <div class="update" id="update" role="status" hidden>
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" /></svg>
+    <span id="update-text"></span>
+    <button class="btn ghost small" id="update-notes" type="button">What's new</button>
+    <div class="spacer"></div>
+    <button class="btn ghost small" id="update-skip" type="button">Skip this version</button>
+    <button class="btn primary small" id="update-go" type="button">Update and restart</button>
+    <button class="icon-btn" id="update-hide" type="button" aria-label="Hide until next start" title="Hide until next start">
+      <svg viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" /></svg>
+    </button>
+  </div>
 
   <section class="where" aria-labelledby="where-title">
     <div class="where-head">
@@ -29,7 +41,7 @@
       <label class="switch">
         <input type="checkbox" id="include-caches" checked />
         <span class="track" aria-hidden="true"></span>
-        Include global package caches
+        <span id="include-caches-text">Include global caches, Docker and WSL</span>
       </label>
     </div>
     <div class="where-row">
@@ -143,6 +155,33 @@
       <p class="modal-lead">DevSweep never offers these folders or anything inside them. Keep a project from its row in the list.</p>
       <ul class="fail-list keep-list" id="keep-list"></ul>
       <p class="fine" id="keep-empty">Nothing is kept yet.</p>
+      <div class="modal-actions">
+        <button class="btn primary" value="ok" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="about">
+    <form method="dialog">
+      <h2>DevSweep <span id="about-version"></span></h2>
+      <label class="check-row">
+        <input type="checkbox" id="check-updates" />
+        Check for updates when DevSweep starts and once a day
+      </label>
+      <p class="fine">The check downloads a small file from DevSweep's GitHub releases. GitHub sees your IP address; DevSweep sends nothing else.</p>
+      <p class="fine" id="about-mode"></p>
+      <p class="about-status" id="about-status" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="check-now" type="button">Check now</button>
+        <button class="btn primary" value="ok" type="submit">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="notes">
+    <form method="dialog">
+      <h2 id="notes-title">What's new</h2>
+      <div class="notes-body" id="notes-body"></div>
       <div class="modal-actions">
         <button class="btn primary" value="ok" type="submit">Close</button>
       </div>

@@ -22,6 +22,19 @@ pub enum Action {
     RemoveDir,
     RemoveContents,
     PnpmPrune,
+    DockerBuildCache,
+    DockerImages,
+    DockerContainers,
+    DockerVolumes,
+    /// Compact a WSL virtual disk file. Nothing inside it is removed.
+    CompactDisk,
+}
+
+impl Action {
+    /// Run through Docker, so `path` is the command shown in the list, not a folder.
+    pub fn is_docker(self) -> bool {
+        matches!(self, Action::DockerBuildCache | Action::DockerImages | Action::DockerContainers | Action::DockerVolumes)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,6 +73,14 @@ pub struct Item {
     /// Programs that must not run while this folder is deleted (caches only).
     #[serde(default)]
     pub tools: Vec<String>,
+    /// Where the freed space shows up, when `path` is not a folder on that drive. Docker's
+    /// data folder for a Docker engine running directly on this machine.
+    #[serde(default)]
+    pub space_on: Option<String>,
+    /// Freed inside a virtual machine's disk file (Docker Desktop, Docker on WSL). The drive
+    /// gets the space back only after that disk is compacted.
+    #[serde(default)]
+    pub in_vm: bool,
 }
 
 /// Shared counters the progress reporter reads while the scan runs.
@@ -359,6 +380,8 @@ pub fn scan_projects(roots: &[PathBuf], cancel: &AtomicBool, progress: &Progress
                 kept: false,
                 action: Action::RemoveDir,
                 tools: Vec::new(),
+                space_on: None,
+                in_vm: false,
             }
         })
         .collect()
@@ -396,6 +419,8 @@ pub fn scan_caches(roots: &[PathBuf], cancel: &AtomicBool) -> Vec<Item> {
                     CacheAction::PnpmPrune => Action::PnpmPrune,
                 },
                 tools: c.tools.iter().map(|t| t.to_string()).collect(),
+                space_on: None,
+                in_vm: false,
             }
         })
         .filter(|i| i.bytes > 0)

@@ -44,12 +44,15 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 - **Finds build output across every project at once.** 42 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig, Haskell, Terraform, Unity and Unreal.
 - **Only offers folders a project owns.** Each match needs its project file next to it, and ambiguous names like `build` or `target` also need a file the build tool writes inside.
 - **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Hugging Face, Electron, Playwright, Cypress and more.
+- **Cleans up after Docker.** The build cache, images no container uses, stopped containers and unused volumes, measured and removed by Docker itself.
+- **Shrinks WSL disks on Windows.** A WSL distribution's `ext4.vhdx`, and Docker Desktop's data disk, grow as Linux writes files and never shrink on their own. DevSweep estimates the empty part and compacts the file to give it back to the drive.
 - **Knows which projects you still use.** "Unused for 30 days" goes by when you last worked on the project, not when its `node_modules` was installed.
 - **Locks folders in use.** Anything a running program or dev tool is using can't be selected, and a cache can't be cleaned while its package manager is installing.
 - **Keeps what you tell it to.** Mark a project as kept and it is never offered again.
 - **Stays out of installed programs** and system folders through a fixed exclusion list.
 - **Shows real savings before you delete.** On Linux, sizes count a hard-linked file once and leave out files shared with the pnpm store, so a pnpm `node_modules` shows what deleting it actually frees. After deleting, the report shows the change in free disk space.
 - **Exports the list** as CSV or JSON, and has a [command line](#command-line) for scripts and scheduled cleanups.
+- **Updates itself.** The Windows installer and the AppImage download, verify and install a new release with one click. See [Updates](#updates).
 - **Runs as a normal user** and never elevates on its own.
 
 ## Installation
@@ -86,6 +89,22 @@ chmod +x DevSweep_*.AppImage
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
 
+### Updates
+
+When DevSweep starts, and once a day while it stays open, it downloads `latest.json` from the newest GitHub release. If that names a newer version, a bar at the top of the window says so. A check that fails, for example while offline, is tried again within the hour.
+
+| Installed from | What the bar offers |
+|---|---|
+| Windows installer (`-setup.exe`) | **Update and restart**: the new installer runs without questions and starts DevSweep again |
+| AppImage | **Update and restart**: the AppImage file is replaced and DevSweep starts again |
+| Portable zip, `.deb`, `.rpm` | **Download**: opens the releases page. apt and dnf need root to update a package, and the portable exe has no installer |
+
+**Skip this version** hides the bar for that release for good; it comes back when a newer one is out. Closing the bar with the cross hides it until DevSweep starts again. **Check now** shows any newer release, skipped or not.
+
+Every update is signed in the release workflow, and DevSweep checks the signature, and the version inside it, against the public key built into the app before installing anything. A download that was changed, or an old release passed off as a new one, is refused. Nothing installs without a click, and DevSweep refuses to update during a scan or a delete.
+
+The check is the only network request DevSweep makes. GitHub sees your IP address and DevSweep sends nothing else. To turn it off, click the version number next to the DevSweep name and clear **Check for updates when DevSweep starts and once a day**. **Check now** in the same dialog checks once.
+
 ## Usage
 
 <p align="center">
@@ -121,7 +140,7 @@ devsweep scan ~/code
 devsweep clean ~/code --older-than 60 --caches --dry-run
 ```
 
-`scan` lists what DevSweep found, with a `*` next to what `clean` would delete. `clean` deletes folders unused for `--older-than` days (30 by default) and asks first; add `--yes` to skip the question in a script or a cron job. `--json` prints the result as JSON, `--include-caution` also takes folders marked "Check first", and with no folder it scans your home folder and every drive except the system one. `devsweep --help` lists everything. On Linux the `.deb` and `.rpm` put `devsweep` on your `PATH`.
+`scan` lists what DevSweep found, with a `*` next to what `clean` would delete. `clean` deletes folders unused for `--older-than` days (30 by default) and asks first; add `--yes` to skip the question in a script or a cron job. `--json` prints the result as JSON, `--include-caution` also takes folders marked "Check first", `--caches` adds the global caches, Docker and WSL disks, and with no folder it scans your home folder and every drive except the system one. `devsweep --help` lists everything. On Linux the `.deb` and `.rpm` put `devsweep` on your `PATH`.
 
 ## What it removes
 
@@ -153,6 +172,24 @@ The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 
 **Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Hugging Face models, Electron, Playwright, Cypress and Puppeteer downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
 
+**Docker.** When Docker is running, DevSweep asks it with `docker system df` what it can free, and lists each kind under Global caches with the command that cleans it:
+
+| Row | Cleaned with | Marked |
+|---|---|---|
+| Docker build cache | `docker builder prune --all` | Rebuilds on its own |
+| Unused Docker images | `docker image prune --all` | Needs reinstall: pulled again over the network |
+| Stopped Docker containers | `docker container prune` | Check first: the files a container wrote are lost |
+| Unused Docker volumes | `docker volume prune --all` | Check first: volumes often hold databases |
+
+Docker removes only what no container uses, and the build cache locks while a `docker build` runs. Docker does not record when an image was last used, so these rows show "Not tracked" and "Select unused" never ticks them; on the command line only `--older-than 0` picks them. With Docker Desktop, or any Docker that runs inside WSL, the space is freed inside a virtual disk file, and the report says so: compact that disk next to give it back to the drive.
+
+**WSL disks (Windows).** Each WSL 2 distribution keeps its files in an `ext4.vhdx` that grows and never shrinks, and Docker Desktop keeps its images in `docker_data.vhdx`. DevSweep finds the registered distributions and Docker Desktop's disk, and estimates what compacting gives back: the file size minus what `df` reports in use inside a running distribution, or what Docker Desktop reports it stores. A disk that cannot be looked into keeps the estimate from the last scan that could, or shows the whole file size until then. Compacting:
+
+- is marked "Check first", because it runs `wsl --shutdown` first, which stops every running distribution and the containers in it,
+- is locked while Docker Desktop runs, since Docker starts WSL again straight away,
+- needs administrator rights (it uses `diskpart`), and DevSweep checks for them before stopping WSL; the report offers **Restart as administrator** otherwise,
+- deletes nothing inside the disk.
+
 ## How it avoids breaking things
 
 - **It only takes folders a project owns.** `node_modules` without a `package.json` next to it is ignored. So is a `target` folder next to `Cargo.toml` that holds notes instead of Cargo output.
@@ -174,6 +211,7 @@ The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 | Finds build output across many projects | Yes, 42 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
 | Checks the owning project file | Yes, plus a marker inside for ambiguous names | Yes | No, it matches folder names | No | n/a | n/a |
 | Global package caches | Yes, over 30 locations | No | No | Shows them | No | One tool each |
+| Docker and WSL disks | Prunes Docker, compacts WSL disks | No | No | Shows the disk files | No | `docker system prune`, `diskpart` by hand |
 | Skips folders a running program uses | Yes | No | No | No | n/a | Some tools refuse while locked |
 | Keeps out of installed apps | Fixed exclusion list | No | Flags them with a warning | No | n/a | n/a |
 | Platforms | Windows, Linux | Windows, macOS, Linux | Anywhere Node.js runs | Windows | Windows | All |
@@ -189,6 +227,9 @@ The short version:
 DevSweep is for the case where you want all of that in one pass, on Windows or Linux, and you'd rather click through a list than trust a glob.
 
 ## Limits
+
+- Docker builds run inside WSL or a container are not seen, so they do not lock the Docker build cache. Docker itself still refuses to remove anything a container uses.
+- Compacting a WSL disk needs administrator rights and stops WSL. DevSweep has no way to compact a disk while a distribution runs.
 
 - Windows and Linux. macOS is not built or tested.
 - On Linux the in-use check sees only your own processes. A dev server run by another user or inside a container does not lock a folder.
@@ -263,19 +304,28 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `src-tauri/src/clean.rs` deletes, and holds the last-chance path checks
 - `src-tauri/src/main.rs` has the Tauri commands
 - `src-tauri/src/cli.rs` is the command line
-- `src-tauri/src/store.rs` saves the keep list and the last scan, and writes exports
+- `src-tauri/src/docker.rs` reads `docker system df` and runs the prunes
+- `src-tauri/src/wsl.rs` finds WSL disk files, estimates their empty space and compacts them
+- `src-tauri/src/command.rs` runs docker, wsl and diskpart with a time limit
+- `src-tauri/src/updates.rs` checks GitHub for a new release and installs it
+- `.github/scripts/updater-manifest.mjs` writes `latest.json` for a release
+- `src-tauri/src/store.rs` saves the keep list, the last scan, WSL disk estimates and settings, and writes exports
 - `src-tauri/src/tests.rs` has the tests against fake projects
 - `tests/ui` has the tests for `ui/logic.js`
 
 ### Publishing a release
 
-Downloads are built only when a GitHub Release is published ([`release.yml`](.github/workflows/release.yml)):
+Downloads are built only when a GitHub Release is published ([`release.yml`](.github/workflows/release.yml)).
+
+Once, before the first release with updates: add the updater's private key as the repository secret `TAURI_SIGNING_PRIVATE_KEY` (**Settings**, **Secrets and variables**, **Actions**). If the key has a password, add it as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The matching public key is `plugins.updater.pubkey` in [`tauri.conf.json`](src-tauri/tauri.conf.json). Keep a backup of the private key: without it, installed copies can never be updated again, and a new key pair only reaches people who download the next version by hand.
+
+For each release:
 
 1. On GitHub, open **Releases**, then **Draft a new release**.
 2. Create a tag such as `v0.2.0`. It must be `v` followed by three numbers.
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
 
-The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
+The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. A separate job then signs the installer and the AppImage, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
 ## Contributing
 

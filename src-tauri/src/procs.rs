@@ -185,6 +185,11 @@ pub fn script_tools(name: &str, cmd: &[String]) -> Vec<String> {
                 add("mvn");
             }
         }
+        // `docker build`, `docker buildx build`, `docker buildx bake`, `docker compose build`
+        // and `docker compose up --build` all use the build cache.
+        "docker" if cmd.iter().skip(1).any(|a| matches!(a.as_str(), "build" | "bake" | "--build")) => {
+            add("docker-build");
+        }
         _ => {}
     }
     if let Some(start) = pm_args {
