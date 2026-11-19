@@ -5,7 +5,7 @@
 DevSweep is a desktop app for Windows and Linux that finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
 
 <p align="center">
-  <a href="https://github.com/tajbinkhan/devsweep/releases"><b>Download for Windows or Linux</b></a>
+  <a href="#installation"><b>Download DevSweep 0.3.0 for Windows or Linux</b></a>
   &nbsp;·&nbsp; <a href="#how-it-avoids-breaking-things">How it stays safe</a>
   &nbsp;·&nbsp; <a href="#how-it-compares">How it compares</a>
 </p>
@@ -57,12 +57,22 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 ## Installation
 
-Download the latest build from the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
+The current version is **0.3.0** ([release notes](https://github.com/tajbinkhan/devsweep/releases/tag/v0.3.0)). Older versions are on the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
+
+| System | Download | Size |
+|---|---|---|
+| Windows, installer | [DevSweep_0.3.0_x64-setup.exe](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_x64-setup.exe) | 3.3 MB |
+| Windows, portable | [DevSweep_0.3.0_x64-portable.zip](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_x64-portable.zip) | 4.5 MB |
+| Debian, Ubuntu, Mint, Pop!_OS | [DevSweep_0.3.0_amd64.deb](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.deb) | 4.7 MB |
+| Fedora, RHEL, openSUSE | [DevSweep-0.3.0-1.x86_64.rpm](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep-0.3.0-1.x86_64.rpm) | 4.7 MB |
+| Any Linux | [DevSweep_0.3.0_amd64.AppImage](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.AppImage) | 83 MB |
+
+The installer and the AppImage update themselves from here on. The portable zip, `.deb` and `.rpm` tell you when a new version is out. See [Updates](#updates).
 
 ### Windows
 
-- `DevSweep_x.y.z_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
-- `DevSweep_x.y.z_x64-portable.zip` holds the exe on its own. Unzip and run it.
+- `DevSweep_0.3.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
+- `DevSweep_0.3.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
 DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with. The builds are not code-signed, so SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
 
@@ -71,20 +81,22 @@ DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ship
 Debian, Ubuntu, Mint and Pop!_OS:
 
 ```bash
-sudo apt install ./DevSweep_x.y.z_amd64.deb
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.deb
+sudo apt install ./DevSweep_0.3.0_amd64.deb
 ```
 
 Fedora, RHEL and openSUSE:
 
 ```bash
-sudo dnf install ./DevSweep-x.y.z-1.x86_64.rpm
+sudo dnf install https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep-0.3.0-1.x86_64.rpm
 ```
 
 Any distribution, without installing:
 
 ```bash
-chmod +x DevSweep_*.AppImage
-./DevSweep_*.AppImage
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.AppImage
+chmod +x DevSweep_0.3.0_amd64.AppImage
+./DevSweep_0.3.0_amd64.AppImage
 ```
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
@@ -324,6 +336,7 @@ For each release:
 1. On GitHub, open **Releases**, then **Draft a new release**.
 2. Create a tag such as `v0.2.0`. It must be `v` followed by three numbers.
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
+4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README. Check the file sizes against the release.
 
 The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. A separate job then signs the installer and the AppImage, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
