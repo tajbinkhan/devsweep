@@ -104,19 +104,22 @@ mod imp {
 
     const LXSS: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss";
 
-    fn wsl() -> std::process::Command {
-        let mut cmd = command::new("wsl.exe");
-        cmd.env("WSL_UTF8", "1");
-        cmd
+    /// Runs wsl.exe from the system folder, printing UTF-8.
+    fn wsl(args: &[&str], limit: Duration) -> std::io::Result<std::process::Output> {
+        let mut cmd = command::system("wsl.exe")?;
+        cmd.env("WSL_UTF8", "1").args(args);
+        command::output(cmd, limit)
     }
 
     /// Every WSL disk file on this machine: registered distributions, plus Docker Desktop's
     /// data disk, which Docker mounts itself and does not register.
     pub fn disks() -> Vec<Disk> {
         let mut out = Vec::new();
-        let mut cmd = command::new("reg");
-        cmd.args(["query", LXSS, "/s"]);
-        if let Ok(o) = command::output(cmd, Duration::from_secs(10))
+        let reg = command::system("reg.exe").and_then(|mut cmd| {
+            cmd.args(["query", LXSS, "/s"]);
+            command::output(cmd, Duration::from_secs(10))
+        });
+        if let Ok(o) = reg
             && o.status.success()
         {
             for (name, base, vhd) in parse_registry(&String::from_utf8_lossy(&o.stdout)) {
@@ -136,9 +139,7 @@ mod imp {
 
     /// Distributions running right now.
     pub fn running() -> Vec<String> {
-        let mut cmd = wsl();
-        cmd.args(["--list", "--running", "--quiet"]);
-        let Ok(o) = command::output(cmd, Duration::from_secs(10)) else { return Vec::new() };
+        let Ok(o) = wsl(&["--list", "--running", "--quiet"], Duration::from_secs(10)) else { return Vec::new() };
         if !o.status.success() {
             return Vec::new();
         }
@@ -147,9 +148,7 @@ mod imp {
 
     /// Bytes in use inside a running distribution. Never starts one that is stopped.
     fn used_inside(distro: &str) -> Option<u64> {
-        let mut cmd = wsl();
-        cmd.args(["--distribution", distro, "--user", "root", "--", "df", "-Pk", "/"]);
-        let o = command::output(cmd, Duration::from_secs(20)).ok()?;
+        let o = wsl(&["--distribution", distro, "--user", "root", "--", "df", "-Pk", "/"], Duration::from_secs(20)).ok()?;
         o.status.success().then(|| parse_df_used(&String::from_utf8_lossy(&o.stdout)))?
     }
 
@@ -244,15 +243,46 @@ mod imp {
         }
     }
 
-    /// Runs a diskpart script. diskpart stops at the first failing line and says why.
-    fn diskpart(lines: &[String], limit: Duration) -> Result<(), String> {
+    /// Writes a diskpart script to the temp folder and hands back a read-only handle that
+    /// keeps it locked. The temp folder belongs to the user, and diskpart runs as
+    /// administrator, so another program could swap the file between writing and running.
+    /// The handle shares only reading, so nothing can change, replace or delete the file while
+    /// it is open, and its content is checked through that handle before diskpart sees it.
+    pub(crate) fn locked_script(text: &str) -> Result<(std::path::PathBuf, fs::File), String> {
+        use std::io::Read;
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
         let n = std::process::id();
         let stamp = std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-        let script = std::env::temp_dir().join(format!("devsweep-diskpart-{n}-{stamp}.txt"));
-        fs::write(&script, format!("{}\nexit\n", lines.join("\n"))).map_err(|e| format!("Could not write the diskpart script: {e}"))?;
-        let mut cmd = command::new("diskpart");
-        cmd.arg("/s").arg(&script);
-        let result = command::output(cmd, limit);
+        let path = std::env::temp_dir().join(format!("devsweep-diskpart-{n}-{stamp}.txt"));
+        let fail = |e: std::io::Error| format!("Could not write the diskpart script: {e}");
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .share_mode(0)
+            .open(&path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, text.as_bytes()))
+            .map_err(fail)?;
+        let mut locked = fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(&path).map_err(fail)?;
+        let mut back = String::new();
+        locked.read_to_string(&mut back).map_err(fail)?;
+        if back != text {
+            drop(locked);
+            let _ = fs::remove_file(&path);
+            return Err("The diskpart script was changed by another program before it could run".into());
+        }
+        Ok((path, locked))
+    }
+
+    /// Runs a diskpart script. diskpart stops at the first failing line and says why.
+    fn diskpart(lines: &[String], limit: Duration) -> Result<(), String> {
+        let (script, lock) = locked_script(&format!("{}\nexit\n", lines.join("\n")))?;
+        let result = command::system("diskpart.exe")
+            .and_then(|mut cmd| {
+                cmd.arg("/s").arg(&script);
+                command::output(cmd, limit)
+            });
+        drop(lock);
         let _ = fs::remove_file(&script);
         let out = result.map_err(|e| format!("Could not run diskpart: {e}"))?;
         if out.status.success() {
@@ -282,13 +312,9 @@ mod imp {
         if let Some(name) = &disk.distro
             && running().contains(name)
         {
-            let mut cmd = wsl();
-            cmd.args(["--distribution", name, "--user", "root", "--", "fstrim", "/"]);
-            let _ = command::output(cmd, Duration::from_secs(300));
+            let _ = wsl(&["--distribution", name, "--user", "root", "--", "fstrim", "/"], Duration::from_secs(300));
         }
-        let mut cmd = wsl();
-        cmd.arg("--shutdown");
-        let out = command::output(cmd, Duration::from_secs(120)).map_err(|e| format!("Could not stop WSL: {e}"))?;
+        let out = wsl(&["--shutdown"], Duration::from_secs(120)).map_err(|e| format!("Could not stop WSL: {e}"))?;
         if !out.status.success() {
             return Err(format!("Could not stop WSL: {}", command::message(&out)).into());
         }
@@ -321,6 +347,8 @@ mod imp {
 
 #[cfg(windows)]
 pub use imp::{compact, scan};
+#[cfg(all(windows, test))]
+pub(crate) use imp::locked_script;
 
 #[cfg(not(windows))]
 pub fn scan(

@@ -17,6 +17,27 @@ pub fn new(program: &str) -> Command {
     cmd
 }
 
+/// A command for a program that ships with Windows (`diskpart.exe`, `reg.exe`, `wsl.exe`),
+/// started by its full path in the system folder. Looked up by name, Windows would try
+/// DevSweep's own folder first, which the per-user install leaves writable; a program
+/// planted there would then run with administrator rights whenever DevSweep has them.
+/// The folder comes from Windows itself, not from `%SystemRoot%`, which the user can set.
+#[cfg(windows)]
+pub fn system(program: &str) -> io::Result<Command> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+    let mut buf = [0u16; 260];
+    // SAFETY: the buffer and its length match, and the call writes at most that many units.
+    let len = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+    if len == 0 || len >= buf.len() {
+        return Err(io::Error::last_os_error());
+    }
+    let dir = std::path::PathBuf::from(std::ffi::OsString::from_wide(&buf[..len]));
+    let mut cmd = new(&dir.join(program).to_string_lossy());
+    cmd.current_dir(&dir);
+    Ok(cmd)
+}
+
 /// Runs `cmd` to the end and collects its output, or kills it once `limit` has passed.
 pub fn output(mut cmd: Command, limit: Duration) -> io::Result<Output> {
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());

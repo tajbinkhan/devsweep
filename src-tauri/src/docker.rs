@@ -28,12 +28,25 @@ impl Engine {
     }
 }
 
+/// Why Docker is left out of a scan running as administrator.
+const ELEVATED: &str = "Docker is not listed while DevSweep runs as administrator. Restart DevSweep normally to clean Docker.";
+
+/// The docker command. Docker can be installed in any folder on PATH, and some of those can
+/// be written by any program, so it is never started while DevSweep has administrator
+/// rights: a planted `docker` would get them too. Pruning does not need those rights.
+fn docker() -> Result<std::process::Command, String> {
+    if crate::elevate::is_elevated() {
+        return Err(ELEVATED.into());
+    }
+    Ok(command::new("docker"))
+}
+
 const INFO_FORMAT: &str = "{{.OSType}}\t{{.OperatingSystem}}\t{{.DockerRootDir}}";
 
 /// The running engine. `Ok(None)` when Docker is not installed or not running, which is not
 /// worth a message; `Err` when Docker runs but refuses DevSweep, which is.
 pub fn engine() -> Result<Option<Engine>, String> {
-    let mut cmd = command::new("docker");
+    let mut cmd = docker()?;
     cmd.args(["info", "--format", INFO_FORMAT]);
     let out = match command::output(cmd, Duration::from_secs(20)) {
         Ok(out) => out,
@@ -166,7 +179,7 @@ pub fn action(kind: Kind) -> Action {
 /// What Docker can free, as list rows. Also returns everything Docker stores, used to work
 /// out how much of Docker Desktop's disk file is empty.
 pub fn scan(engine: &Engine, now: i64) -> (Vec<Item>, u64) {
-    let mut cmd = command::new("docker");
+    let Ok(mut cmd) = docker() else { return (Vec::new(), 0) };
     cmd.args(["system", "df", "--format", "{{json .}}"]);
     let Ok(out) = command::output(cmd, Duration::from_secs(60)) else { return (Vec::new(), 0) };
     if !out.status.success() {
@@ -252,7 +265,7 @@ pub fn kind_of(action: Action) -> Option<Kind> {
 /// Runs the prune for `kind`. Docker refuses on its own to remove anything a container uses.
 pub fn prune(kind: Kind) -> Result<(), Failure> {
     let run = |args: &[&str]| {
-        let mut cmd = command::new("docker");
+        let mut cmd = docker().map_err(std::io::Error::other)?;
         cmd.args(args);
         command::output(cmd, Duration::from_secs(60 * 60))
     };

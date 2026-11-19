@@ -741,3 +741,25 @@ fn settings_from_an_older_version_still_load() {
     let skipped: Settings = serde_json::from_str(r#"{"checkUpdates":true,"skippedVersion":"0.2.0"}"#).unwrap();
     assert_eq!(skipped.skipped_version.as_deref(), Some("0.2.0"));
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_tools_start_from_the_system_folder() {
+    let cmd = crate::command::system("diskpart.exe").unwrap();
+    let program = Path::new(cmd.get_program()).to_path_buf();
+    assert!(program.is_absolute(), "{program:?}");
+    assert!(program.to_string_lossy().to_lowercase().ends_with(r"\system32\diskpart.exe"), "{program:?}");
+    assert_eq!(cmd.get_current_dir(), program.parent());
+}
+
+#[cfg(windows)]
+#[test]
+fn the_diskpart_script_cannot_be_changed_while_it_runs() {
+    let (path, lock) = crate::wsl::locked_script("select vdisk file=\"x\"\nexit\n").unwrap();
+    assert!(fs::write(&path, "clean").is_err(), "writing must fail while locked");
+    assert!(fs::remove_file(&path).is_err(), "deleting must fail while locked");
+    assert!(fs::rename(&path, path.with_extension("old")).is_err(), "renaming must fail while locked");
+    assert!(fs::read_to_string(&path).is_ok(), "diskpart can still read it");
+    drop(lock);
+    fs::remove_file(&path).unwrap();
+}
