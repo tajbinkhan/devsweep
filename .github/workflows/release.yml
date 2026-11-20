@@ -13,6 +13,9 @@ name: Release
 # Installed copies of DevSweep update themselves from latest.json, which the sign job writes
 # and the publish job uploads last. Signing needs the TAURI_SIGNING_PRIVATE_KEY secret (and
 # TAURI_SIGNING_PRIVATE_KEY_PASSWORD when the key has a password).
+#
+# Windows code signing goes through SignPath and needs the SIGNPATH_ORGANIZATION_ID variable
+# and the SIGNPATH_API_TOKEN secret. Without the variable, the Windows files stay unsigned.
 
 on:
   release:
@@ -49,6 +52,9 @@ jobs:
         id: version
         env:
           TAG: ${{ github.event.release.tag_name }}
+          PLATFORM: ${{ matrix.name }}
+          EVENT: ${{ github.event_name }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
         run: |
           if [ -n "$TAG" ]; then
             version="${TAG#v}"
@@ -63,6 +69,13 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "{\"version\": \"$version\"}" > "$RUNNER_TEMP/version.conf.json"
           echo "Building DevSweep $version"
+          # When the Windows files are going to be code-signed, they go to the authenticode job
+          # under another name, and that job uploads the signed copies under the usual name.
+          if [ "$PLATFORM" = windows ] && [ "$EVENT" = release ] && [ -n "$SIGNPATH_ORGANIZATION_ID" ]; then
+            echo "artifact=Unsigned-$PLATFORM-$version" >> "$GITHUB_OUTPUT"
+          else
+            echo "artifact=DevSweep-$PLATFORM-$version" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install system libraries
         if: runner.os == 'Linux'
@@ -120,7 +133,149 @@ jobs:
       - name: Keep downloads as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DevSweep-${{ matrix.name }}-${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Code-signs the Windows exe and installer through SignPath, so Windows names the publisher
+  # instead of warning about an unrecognized app. It runs on a release once the
+  # SIGNPATH_ORGANIZATION_ID variable is set; until then the unsigned files are published as
+  # before. A release sends two signing requests, the exe and then the installer that holds
+  # it, and an approver has to approve each one in SignPath while this job waits.
+  authenticode:
+    name: Code-sign Windows downloads
+    needs: build
+    if: github.event_name == 'release' && vars.SIGNPATH_ORGANIZATION_ID != ''
+    runs-on: windows-latest
+    # Leaves an hour for each approval.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      # SignPath downloads the unsigned files from this run and checks how they were built.
+      actions: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Check the SignPath token
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if (-not $env:SIGNPATH_API_TOKEN) {
+            "::error::SIGNPATH_ORGANIZATION_ID is set but the SIGNPATH_API_TOKEN secret is missing."
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the Tauri CLI
+        run: npm ci
+
+      - name: Work out the version
+        id: version
+        run: |
+          $version = $env:TAG -replace '^v', ''
+          "version=$version" >> $env:GITHUB_OUTPUT
+          @{ version = $version } | ConvertTo-Json -Compress | Set-Content "$env:RUNNER_TEMP/version.conf.json"
+
+      - name: Fetch the unsigned Windows downloads
+        uses: actions/download-artifact@v4
+        with:
+          name: Unsigned-windows-${{ steps.version.outputs.version }}
+          path: unsigned
+
+      # The portable zip holds the exe as Tauri left it. The installer gets a copy with the
+      # marker that tauri build would have written, because the signed copy must not change.
+      - name: Prepare the exe for signing
+        run: |
+          Expand-Archive "unsigned/DevSweep_${{ steps.version.outputs.version }}_x64-portable.zip" unsigned/portable
+          New-Item -ItemType Directory -Force exe/portable, exe/installer | Out-Null
+          Copy-Item unsigned/portable/devsweep.exe exe/portable/
+          node .github/scripts/mark-nsis-exe.mjs unsigned/portable/devsweep.exe exe/installer/devsweep.exe
+
+      - name: Upload the exe for signing
+        id: upload-exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-exe
+          path: exe/
+          retention-days: 1
+          if-no-files-found: error
+
+      # The artifact configurations named here are copies of the files in .github/signpath.
+      - name: Sign the exe
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'devsweep' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.upload-exe.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-exe
+
+      # --no-binary-patching stops tauri bundle from writing the marker into the signed exe.
+      - name: Pack the signed exe into the installer
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/target/release, installer | Out-Null
+          Copy-Item signed-exe/installer/devsweep.exe src-tauri/target/release/devsweep.exe
+          npx tauri bundle --bundles nsis --no-binary-patching --config "$env:RUNNER_TEMP/version.conf.json"
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe installer/
+
+      - name: Upload the installer for signing
+        id: upload-installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-installer
+          path: installer/
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Sign the installer
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'devsweep' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-installer
+
+      - name: Check the signatures and collect the downloads
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $installer = Get-ChildItem signed-installer/*-setup.exe
+          foreach ($f in @("signed-exe/portable/devsweep.exe", $installer.FullName)) {
+            $sig = Get-AuthenticodeSignature $f
+            if ($sig.Status -ne 'Valid') { throw "$f is not signed: $($sig.StatusMessage)" }
+            "$f is signed by $($sig.SignerCertificate.Subject)"
+          }
+          $portable = @("signed-exe/portable/devsweep.exe")
+          if (Test-Path unsigned/portable/WebView2Loader.dll) { $portable += "unsigned/portable/WebView2Loader.dll" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path $portable -DestinationPath "dist/DevSweep_${version}_x64-portable.zip"
+          Copy-Item $installer dist/
+
+      - name: Keep the signed downloads as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DevSweep-windows-${{ steps.version.outputs.version }}
           path: dist/*
           if-no-files-found: error
 
@@ -128,10 +283,15 @@ jobs:
   # writes latest.json, which installed copies of DevSweep read to find the new version. The
   # signing key lives only in this job, which runs the Tauri CLI and nothing else, not in the
   # build job, which runs every crate's build script.
+  # The installer is signed here after the authenticode job, because code signing changes the
+  # file and would no longer match this signature.
   sign:
     name: Sign updates
-    needs: build
-    if: github.event_name == 'release'
+    needs: [build, authenticode]
+    # Also runs when the authenticode job was skipped because SignPath is not set up.
+    if: >-
+      !cancelled() && github.event_name == 'release' && needs.build.result == 'success' &&
+      (needs.authenticode.result == 'success' || needs.authenticode.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -186,8 +346,8 @@ jobs:
     name: Publish downloads
     # Runs only after every platform has built and the updates are signed, so a release never
     # gets a partial set of files.
-    needs: [build, sign]
-    if: github.event_name == 'release'
+    needs: [build, authenticode, sign]
+    if: "!cancelled() && github.event_name == 'release' && needs.sign.result == 'success'"
     runs-on: ubuntu-latest
     permissions:
       contents: write
