@@ -8,6 +8,7 @@ DevSweep is a desktop app for Windows and Linux that finds the files your develo
   <a href="#installation"><b>Download DevSweep 0.3.0 for Windows or Linux</b></a>
   &nbsp;·&nbsp; <a href="#how-it-avoids-breaking-things">How it stays safe</a>
   &nbsp;·&nbsp; <a href="#how-it-compares">How it compares</a>
+  &nbsp;·&nbsp; <a href="https://tajbinkhan.github.io/devsweep/">Website</a>
 </p>
 
 ![DevSweep after a scan: project folders sorted by size, each with its type, age and the command that brings it back](assets/screenshot.png)
@@ -324,6 +325,7 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `src-tauri/src/command.rs` runs docker, wsl and diskpart with a time limit
 - `src-tauri/src/updates.rs` checks GitHub for a new release and installs it
 - `.github/scripts/updater-manifest.mjs` writes `latest.json` for a release
+- `site/` is the website at [tajbinkhan.github.io/devsweep](https://tajbinkhan.github.io/devsweep/), published by [`pages.yml`](.github/workflows/pages.yml) when it changes on `main`. Change its download links with each release, as with this README.
 - `.github/scripts/mark-nsis-exe.mjs` marks the installer's copy of the exe before it is code-signed, and `.github/signpath` holds the SignPath artifact configurations
 - `src-tauri/src/store.rs` saves the keep list, the last scan, WSL disk estimates and settings, and writes exports
 - `src-tauri/src/tests.rs` has the tests against fake projects
@@ -348,7 +350,7 @@ For each release:
 1. On GitHub, open **Releases**, then **Draft a new release**.
 2. Create a tag such as `v0.2.0`. It must be `v` followed by three numbers.
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
-4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README. Check the file sizes against the release.
+4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README, and the version, links and sizes in `site/index.html`. Check the file sizes against the release.
 
 The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
