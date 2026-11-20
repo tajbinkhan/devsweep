@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/release.yml": {
-    "mtime": 1795076631.5063455,
-    "ast_hash": "6093c6664712924b26ba7b59d8aaba27",
+    "mtime": 1795135194.9915934,
+    "ast_hash": "82a4a0395e3806bddd558c3c6ce3dd66",
     "semantic_hash": ""
   },
   "package.json": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795077118.6141224,
-    "ast_hash": "0dbb783ba135faca2b791abc92144779",
+    "mtime": 1795135313.3606687,
+    "ast_hash": "6dd27914de3e4ba31945e56e18cb755e",
     "semantic_hash": ""
   },
   "ui/index.html": {
@@ -397,6 +397,11 @@
   "src-tauri/src/updates.rs": {
     "mtime": 1795076498.1295688,
     "ast_hash": "330d716d5e70cb74adb486ae23fb0363",
+    "semantic_hash": ""
+  },
+  ".github/scripts/mark-nsis-exe.mjs": {
+    "mtime": 1795135042.5913162,
+    "ast_hash": "55f67a09f31dfa37766ae977f6a6ef64",
     "semantic_hash": ""
   }
 }

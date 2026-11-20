@@ -1,16 +1,16 @@
-# Graph Report - devsweep  (2026-11-19)
+# Graph Report - devsweep  (2026-11-20)
 
 ## Corpus Check
-- 25 files · ~49,659 words
+- 26 files · ~51,039 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 548 nodes · 1107 edges · 50 communities (30 shown, 20 thin omitted)
+- 554 nodes · 1112 edges · 50 communities (30 shown, 20 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 55 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ef45cc39`
+- Built from commit: `d12c7438`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -84,9 +84,9 @@
   assets/readme/hero.svg → ui/index.html
 - `Step 03 Delete (still owned and unused, no links, real space freed)` --references--> `Reports real free-space change`  [INFERRED]
   assets/readme/workflow.svg → README.md
-- `Scan, Review, Delete workflow` --references--> `Scan, Review, Delete workflow diagram`  [EXTRACTED]
-  README.md → assets/readme/workflow.svg
-- `Step 02 Review (unused 30 days, locked in use, Check first)` --references--> `Preselect folders unused for N days (default 30)`  [INFERRED]
+- `Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered)` --references--> `Fixed scanner exclusion list`  [INFERRED]
+  assets/readme/hero.svg → README.md
+- `Step 01 Scan (project file, build marker, skips installed apps)` --references--> `Fixed scanner exclusion list`  [INFERRED]
   assets/readme/workflow.svg → README.md
 
 ## Import Cycles
@@ -110,8 +110,8 @@ Cohesion: 0.12
 Nodes (51): Drop, Emit, Fn, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove() (+43 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
-Cohesion: 0.33
-Nodes (6): cache_entries, CI workflow (ci.yml, Windows and Linux), ProjectRule / PROJECT_RULES, rules.rs (folder rules, exclusions, cache entries), 29 supported project folder types, tests.rs (fake-project tests)
+Cohesion: 0.19
+Nodes (13): cache_entries, CI workflow (ci.yml, Windows and Linux), Fixed scanner exclusion list, In-use folder locking, kondo, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder), Project folder ownership rule (project file next to it, marker inside) (+5 more)
 
 ### Community 4 - "CI Workflow Config"
 Cohesion: 0.17
@@ -142,16 +142,16 @@ Cohesion: 0.22
 Nodes (14): DevSweep App Screenshot, Detected Artifact Types (Rust target, Python .venv, CMake build, Node node_modules, Flutter build, Next.js .next), Selection Summary and Delete Selected Footer, Drive Free Space Meters (C:, D:, F:), Filter, Select Unused For N Days, Clear Selection, How It Comes Back Recovery Badges, Include Global Package Caches Toggle, Last Changed Age Highlight (+6 more)
 
 ### Community 11 - "cli.rs"
-Cohesion: 0.14
-Nodes (27): arc, io, age_days(), attach_console(), days(), execute(), fmt_age(), fmt_bytes() (+19 more)
+Cohesion: 0.23
+Nodes (18): arc, age_days(), attach_console(), days(), execute(), fmt_age(), fmt_bytes(), folders() (+10 more)
 
 ### Community 12 - "npm Package Manifest"
 Cohesion: 0.17
 Nodes (11): description, devDependencies, @tauri-apps/cli, name, private, scripts, build, dev (+3 more)
 
 ### Community 13 - "Delete Dialogs and Privileges"
-Cohesion: 0.29
-Nodes (7): chown command hint for root-owned folders (Linux), Reports real free-space change, Restart as administrator (Windows UAC), Runs as normal user, never self-elevates, Administrator badge, Report dialog (failures, admin note, Restart as administrator), Deleting progress dialog
+Cohesion: 0.20
+Nodes (10): chown command hint for root-owned folders (Linux), Permanent deletion (no Recycle Bin), Reports real free-space change, Restart as administrator (Windows UAC), Runs as normal user, never self-elevates, Administrator badge, Delete confirmation dialog, Report dialog (failures, admin note, Restart as administrator) (+2 more)
 
 ### Community 14 - "Linux Bundle Config"
 Cohesion: 0.20
@@ -178,8 +178,8 @@ Cohesion: 0.20
 Nodes (11): 63 GB of 100 GB drive was Rust target stat bar, DevSweep README hero image, DevSweep, main.rs (Tauri commands), Native clean commands (cargo clean, npm cache clean), npkill, Storage Sense, Disk Cleanup, Tauri 2 (Rust backend + plain HTML/CSS/JS UI) (+3 more)
 
 ### Community 23 - "Step 02 Review (unused 30 days, locked in use, Check first)"
-Cohesion: 0.28
-Nodes (9): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 01 Scan (project file, build marker, skips installed apps), Fixed scanner exclusion list, kondo, Project folder ownership rule (project file next to it, marker inside), Empty state safety rules list (+1 more)
+Cohesion: 0.24
+Nodes (10): Safety badges (Rebuilds on its own, Check first, Needs reinstall, Never offered), Mock scan result panel (target, .venv, node_modules, Program Files), Scan, Review, Delete workflow diagram, Step 02 Review (unused 30 days, locked in use, Check first), Step 01 Scan (project file, build marker, skips installed apps), Check first marking (venv, PHP vendor), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30) (+2 more)
 
 ### Community 24 - "Step 03 Delete (still owned and unused, no links, real space freed)"
 Cohesion: 0.50
@@ -211,14 +211,14 @@ Nodes (5): [dist, version, tag, repo, out], files, linux, manifest, windows
 
 ### Community 48 - "Scan, Review, Delete workflow"
 Cohesion: 0.33
-Nodes (6): Permanent deletion (no Recycle Bin), Scan, Review, Delete workflow, Preselect folders unused for N days (default 30), Delete confirmation dialog, Select unused for N days control, Selection footer with Delete selected
+Nodes (9): io, message(), new(), output(), Command, Duration, Result, String (+1 more)
 
 ### Community 49 - "Step 02 Review (unused 30 days, locked in use, Check first)"
-Cohesion: 0.40
-Nodes (5): Step 02 Review (unused 30 days, locked in use, Check first), Check first marking (venv, PHP vendor), In-use folder locking, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder)
+Cohesion: 0.33
+Nodes (5): at, exe, [input, output], nsis, placeholder
 
 ## Knowledge Gaps
-- **72 isolated node(s):** `[dist, version, tag, repo, out]`, `files`, `windows`, `linux`, `manifest` (+67 more)
+- **77 isolated node(s):** `[input, output]`, `placeholder`, `nsis`, `exe`, `at` (+72 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -226,11 +226,11 @@ Nodes (5): Step 02 Review (unused 30 days, locked in use, Check first), Check fi
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.141) - this node is a cross-community bridge._
+  _High betweenness centrality (0.138) - this node is a cross-community bridge._
 - **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
-  _High betweenness centrality (0.128) - this node is a cross-community bridge._
-- **What connects `[dist, version, tag, repo, out]`, `files`, `windows` to the rest of the system?**
-  _72 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _High betweenness centrality (0.125) - this node is a cross-community bridge._
+- **What connects `[input, output]`, `placeholder`, `nsis` to the rest of the system?**
+  _77 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
   _Cohesion score 0.14112903225806453 - nodes in this community are weakly interconnected._
 - **Should `Tauri Commands and Elevation` be split into smaller, more focused modules?**

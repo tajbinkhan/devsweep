@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "exe". SignPath keeps its own copy: paste this file into the
+  project's artifact configuration with the slug "exe" whenever it changes here.
+
+  Signs the two copies of devsweep.exe that the authenticode job in release.yml uploads: the
+  one for the portable zip and the one marked for the NSIS installer. SignPath refuses to sign
+  either unless it is named DevSweep and carries the version being released.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file-set product-name="DevSweep" product-version="${version}" file-version="${version}">
+      <include path="portable/devsweep.exe" />
+      <include path="installer/devsweep.exe" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

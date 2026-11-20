@@ -25,6 +25,7 @@ DevSweep is a desktop app for Windows and Linux that finds the files your develo
 - [Limits](#limits)
 - [Development](#development)
 - [Contributing](#contributing)
+- [Code signing policy](#code-signing-policy)
 - [License](#license)
 
 ## Why DevSweep
@@ -74,7 +75,9 @@ The installer and the AppImage update themselves from here on. The portable zip,
 - `DevSweep_0.3.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
 - `DevSweep_0.3.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
-DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with. The builds are not code-signed, so SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
+DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with.
+
+The Windows downloads are code-signed through SignPath. See [Code signing policy](#code-signing-policy). Releases up to 0.3.0 are not signed, and a newly signed release can still get a warning until Windows has seen enough downloads of it. Either way, SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
 
 ### Linux
 
@@ -321,6 +324,7 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `src-tauri/src/command.rs` runs docker, wsl and diskpart with a time limit
 - `src-tauri/src/updates.rs` checks GitHub for a new release and installs it
 - `.github/scripts/updater-manifest.mjs` writes `latest.json` for a release
+- `.github/scripts/mark-nsis-exe.mjs` marks the installer's copy of the exe before it is code-signed, and `.github/signpath` holds the SignPath artifact configurations
 - `src-tauri/src/store.rs` saves the keep list, the last scan, WSL disk estimates and settings, and writes exports
 - `src-tauri/src/tests.rs` has the tests against fake projects
 - `tests/ui` has the tests for `ui/logic.js`
@@ -331,6 +335,14 @@ Downloads are built only when a GitHub Release is published ([`release.yml`](.gi
 
 Once, before the first release with updates: add the updater's private key as the repository secret `TAURI_SIGNING_PRIVATE_KEY` (**Settings**, **Secrets and variables**, **Actions**). If the key has a password, add it as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The matching public key is `plugins.updater.pubkey` in [`tauri.conf.json`](src-tauri/tauri.conf.json). Keep a backup of the private key: without it, installed copies can never be updated again, and a new key pair only reaches people who download the next version by hand.
 
+Windows code signing, once SignPath has accepted the project at [signpath.org](https://signpath.org):
+
+1. In SignPath, create two artifact configurations with the slugs `exe` and `installer`, and paste in [`.github/signpath/exe.xml`](.github/signpath/exe.xml) and [`.github/signpath/installer.xml`](.github/signpath/installer.xml). They sign only files named DevSweep that carry the version being released. When those files change in the repository, paste them into SignPath again.
+2. Add a SignPath API token for a user with the submitter role as the repository secret `SIGNPATH_API_TOKEN`.
+3. Add the SignPath organization ID as the repository variable `SIGNPATH_ORGANIZATION_ID` (**Settings**, **Secrets and variables**, **Actions**, **Variables**). If the project or signing policy slug is not `devsweep` or `release-signing`, set `SIGNPATH_PROJECT_SLUG` or `SIGNPATH_SIGNING_POLICY_SLUG` as well.
+
+Until `SIGNPATH_ORGANIZATION_ID` is set, releases publish unsigned Windows files. Once it is set, each release sends two signing requests, the exe and then the installer built around it, and someone with the approver role has to approve each one in SignPath within an hour.
+
 For each release:
 
 1. On GitHub, open **Releases**, then **Draft a new release**.
@@ -338,7 +350,7 @@ For each release:
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
 4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README. Check the file sizes against the release.
 
-The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. A separate job then signs the installer and the AppImage, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
+The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
 ## Contributing
 
@@ -347,6 +359,17 @@ Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbink
 - **Missing toolchain?** Add a `ProjectRule` to `PROJECT_RULES` in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs) (about ten lines), or a line to `cache_entries` for a global cache. Add a case to [`src-tauri/src/tests.rs`](src-tauri/src/tests.rs) that builds a fake project and checks the folder is found, and that a lookalike folder without the project file is not.
 - **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
 - Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test "tests/ui/*.test.js"`, before opening a pull request. CI runs the same checks on Windows and Linux.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The release workflow ([`release.yml`](.github/workflows/release.yml)) signs the Windows installer and the exe in the portable zip. It builds them on GitHub-hosted runners from the source at the release tag, and a person approves every signing request in SignPath. Nothing built outside that workflow is signed.
+
+- Committers and reviewers: [tajbinkhan](https://github.com/tajbinkhan)
+- Approvers: [tajbinkhan](https://github.com/tajbinkhan)
+
+Privacy: DevSweep sends nothing about you or your files anywhere. Its only network request is the update check described in [Updates](#updates), which fetches `latest.json` from GitHub Releases when DevSweep starts and once a day, and which you can turn off. Installing an update downloads it from the same place. GitHub's [privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) covers those requests.
 
 ## License
 
