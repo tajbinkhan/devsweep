@@ -575,6 +575,13 @@ pub fn never_enter_paths() -> Vec<PathBuf> {
             out.push(PathBuf::from(dir));
         }
     }
+    // macOS system folders. /Volumes holds the other drives, which are scanned as drives of
+    // their own, and /System/Volumes/Data is the same files as / seen a second time.
+    if cfg!(target_os = "macos") {
+        for dir in ["/System", "/Library", "/Applications", "/private", "/Volumes", "/cores"] {
+            out.push(PathBuf::from(dir));
+        }
+    }
     out
 }
 
@@ -663,8 +670,19 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     // Some cross-platform tools use ~/.cache on every OS, Windows included.
     let dot_cache = home.join(".cache");
     let win = cfg!(windows);
+    let mac = cfg!(target_os = "macos");
     let pick = |windows: PathBuf, other: PathBuf| if win { windows } else { other };
     let env = |var: &str| std::env::var_os(var).map(PathBuf::from);
+    // On macOS `cache` is ~/Library/Caches and `local` is ~/Library/Application Support. Most
+    // tools follow that, but pnpm uses ~/Library/pnpm, and uv and NuGet use the Linux folders.
+    let pnpm_home = if mac { home.join("Library").join("pnpm") } else { local.join("pnpm") };
+    let nuget_local = if mac { home.join(".local").join("share") } else { local.clone() };
+    let uv = if mac { dot_cache.join("uv") } else { pick(local.join("uv").join("cache"), cache.join("uv")) };
+    let sccache = if mac {
+        cache.join("Mozilla.sccache")
+    } else {
+        pick(local.join("Mozilla").join("sccache").join("cache"), cache.join("sccache"))
+    };
 
     let cargo_home = env("CARGO_HOME").unwrap_or_else(|| home.join(".cargo"));
     let go_cache = env("GOCACHE").unwrap_or_else(|| cache.join("go-build"));
@@ -694,15 +712,15 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
         ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents, NODE),
         ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
         ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
-        ("pnpm store", "Node.js", local.join("pnpm").join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE),
+        ("pnpm store", "Node.js", pnpm_home.join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE),
         ("Deno cache", "Deno", deno, Safe, "Downloaded again by deno when needed", None, RemoveContents, &["deno"]),
         ("Cargo registry sources", "Rust", cargo_home.join("registry").join("src"), Safe, "Unpacked again from the local registry cache by cargo", None, RemoveContents, CARGO),
         ("Cargo registry downloads", "Rust", cargo_home.join("registry").join("cache"), Reinstall, "Downloaded again by cargo, needs network", None, RemoveContents, CARGO),
         ("Cargo git checkouts", "Rust", cargo_home.join("git").join("checkouts"), Safe, "Checked out again by cargo", None, RemoveContents, CARGO),
-        ("sccache", "Rust", pick(local.join("Mozilla").join("sccache").join("cache"), cache.join("sccache")), Safe, "Filled again by the next builds", None, RemoveContents, &["sccache", "cargo"]),
+        ("sccache", "Rust", sccache, Safe, "Filled again by the next builds", None, RemoveContents, &["sccache", "cargo"]),
         ("ccache", "C and C++", pick(local.join("ccache"), cache.join("ccache")), Safe, "Filled again by the next builds", None, RemoveContents, &["ccache"]),
         ("pip cache", "Python", pick(local.join("pip").join("cache"), cache.join("pip")), Safe, "Downloaded again by pip when needed", None, RemoveContents, PY),
-        ("uv cache", "Python", pick(local.join("uv").join("cache"), cache.join("uv")), Safe, "Downloaded again by uv when needed", None, RemoveContents, PY),
+        ("uv cache", "Python", uv, Safe, "Downloaded again by uv when needed", None, RemoveContents, PY),
         // Poetry keeps its virtual environments next to these two, so only these are offered.
         ("Poetry cache", "Python", poetry.join("cache"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
         ("Poetry artifacts", "Python", poetry.join("artifacts"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
@@ -713,8 +731,8 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
         ("Gradle wrapper downloads", "Gradle", home.join(".gradle").join("wrapper").join("dists"), Reinstall, "Downloaded again by ./gradlew", None, RemoveContents, GRADLE),
         ("Maven repository", "Maven", home.join(".m2").join("repository"), Reinstall, "Downloaded again by mvn, needs network", Some("Offline builds fail until dependencies are downloaded again."), RemoveContents, &["mvn"]),
         ("NuGet packages", ".NET", home.join(".nuget").join("packages"), Reinstall, "Restored by dotnet restore, needs network", None, RemoveContents, NUGET),
-        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("v3-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
-        ("NuGet HTTP cache", ".NET", local.join("NuGet").join("http-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
+        ("NuGet HTTP cache", ".NET", nuget_local.join("NuGet").join("v3-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
+        ("NuGet HTTP cache", ".NET", nuget_local.join("NuGet").join("http-cache"), Safe, "Downloaded again when needed", None, RemoveContents, NUGET),
         ("Go build cache", "Go", go_cache, Safe, "Rebuilt by go build", None, RemoveContents, GO),
         ("Go module cache", "Go", go_mod, Reinstall, "Downloaded again by go, needs network", None, RemoveContents, GO),
         ("Electron downloads", "Electron", pick(local.join("electron").join("Cache"), cache.join("electron")), Safe, "Downloaded again when needed", None, RemoveContents, ELECTRON),

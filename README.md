@@ -2,7 +2,7 @@
   <img src="assets/readme/hero.svg" width="100%" alt="DevSweep: finds the folders your dev tools can rebuild and deletes only the ones that are safe">
 </h1>
 
-DevSweep is a desktop app for Windows and Linux that finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
+DevSweep is a desktop app for Windows, Linux and, as an experiment, macOS. It finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
 
 <p align="center">
   <a href="#installation"><b>Download DevSweep 0.3.0 for Windows or Linux</b></a>
@@ -106,6 +106,20 @@ chmod +x DevSweep_0.3.0_amd64.AppImage
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
 
+### macOS (experimental)
+
+The macOS build is experimental. GitHub's macOS runners build and test it, but nobody has tried it on a real Mac yet. If you do, [say how it went](https://github.com/tajbinkhan/devsweep/issues).
+
+Releases after 0.3.0 include `DevSweep_<version>_universal.dmg`, one app for Apple Silicon and Intel Macs on macOS 11 or later. Open the disk image and drag DevSweep to Applications.
+
+The app has no Apple Developer ID signature and is not notarized, so macOS blocks it the first time. Open **System Settings**, then **Privacy & Security**, scroll to the message about DevSweep and click **Open Anyway**. If macOS says the app is damaged instead, remove the download quarantine in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DevSweep.app
+```
+
+macOS asks before any app reads Desktop, Documents, Downloads and a few other folders. Allow it, or DevSweep reports those folders as access denied. To scan without the prompts, add DevSweep under **Privacy & Security**, **Full Disk Access**.
+
 ### Updates
 
 When DevSweep starts, and once a day while it stays open, it downloads `latest.json` from the newest GitHub release. If that names a newer version, a bar at the top of the window says so. A check that fails, for example while offline, is tried again within the hour.
@@ -115,6 +129,7 @@ When DevSweep starts, and once a day while it stays open, it downloads `latest.j
 | Windows installer (`-setup.exe`) | **Update and restart**: the new installer runs without questions and starts DevSweep again |
 | AppImage | **Update and restart**: the AppImage file is replaced and DevSweep starts again |
 | Portable zip, `.deb`, `.rpm` | **Download**: opens the releases page. apt and dnf need root to update a package, and the portable exe has no installer |
+| macOS app | **Download**: opens the releases page. The app is not notarized, so it does not replace itself |
 
 **Skip this version** hides the bar for that release for good; it comes back when a newer one is out. Closing the bar with the cross hides it until DevSweep starts again. **Check now** shows any newer release, skipped or not.
 
@@ -231,7 +246,7 @@ Docker removes only what no container uses, and the build cache locks while a `d
 | Docker and WSL disks | Prunes Docker, compacts WSL disks | No | No | Shows the disk files | No | `docker system prune`, `diskpart` by hand |
 | Skips folders a running program uses | Yes | No | No | No | n/a | Some tools refuse while locked |
 | Keeps out of installed apps | Fixed exclusion list | No | Flags them with a warning | No | n/a | n/a |
-| Platforms | Windows, Linux | Windows, macOS, Linux | Anywhere Node.js runs | Windows | Windows | All |
+| Platforms | Windows, Linux, macOS (experimental) | Windows, macOS, Linux | Anywhere Node.js runs | Windows | Windows | All |
 
 The short version:
 
@@ -248,7 +263,7 @@ DevSweep is for the case where you want all of that in one pass, on Windows or L
 - Docker builds run inside WSL or a container are not seen, so they do not lock the Docker build cache. Docker itself still refuses to remove anything a container uses.
 - Compacting a WSL disk needs administrator rights and stops WSL. DevSweep has no way to compact a disk while a distribution runs.
 
-- Windows and Linux. macOS is not built or tested.
+- Windows and Linux are tested on real machines. The macOS build has only run on GitHub's macOS runners. On macOS, folders that the privacy settings block show up as access denied, with advice about `chown` that does not apply.
 - On Linux the in-use check sees only your own processes. A dev server run by another user or inside a container does not lock a folder.
 - On Linux DevSweep cannot restart itself as root. Folders full of root-owned files have to be handed back with `chown` first.
 - Deletion is permanent.
@@ -278,6 +293,7 @@ DevSweep is a [Tauri 2](https://tauri.app) app: a Rust backend in `src-tauri/` a
   ```bash
   sudo dnf install webkit2gtk4.1-devel openssl-devel libxdo-devel libappindicator-gtk3-devel librsvg2-devel
   ```
+- **macOS:** the Xcode Command Line Tools (`xcode-select --install`).
 
 ### Run from source
 
@@ -302,7 +318,7 @@ The interface's selection and formatting rules live in `ui/logic.js` and have th
 node --test "tests/ui/*.test.js"
 ```
 
-GitHub Actions runs both, plus `cargo clippy -- -D warnings`, on Windows and Linux for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)).
+GitHub Actions runs both, plus `cargo clippy -- -D warnings`, on Windows, Linux and macOS for every push to `main` and every pull request ([`ci.yml`](.github/workflows/ci.yml)). A macOS failure shows up in the run without failing it, since macOS support is experimental.
 
 ### Build packages
 
@@ -310,7 +326,7 @@ GitHub Actions runs both, plus `cargo clippy -- -D warnings`, on Windows and Lin
 npm run build
 ```
 
-On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Linux the `.deb`, `.rpm` and AppImage land in `src-tauri/target/release/bundle/deb`, `rpm` and `appimage`.
+On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Linux the `.deb`, `.rpm` and AppImage land in `src-tauri/target/release/bundle/deb`, `rpm` and `appimage`. On macOS the app and the disk image land in `src-tauri/target/release/bundle/macos` and `dmg`. The release workflow builds one universal app for both Mac architectures with `npm run build -- --target universal-apple-darwin`, which needs `rustup target add aarch64-apple-darwin x86_64-apple-darwin` first.
 
 ### Code layout
 
@@ -351,9 +367,9 @@ For each release:
 1. On GitHub, open **Releases**, then **Draft a new release**.
 2. Create a tag such as `v0.2.0`. It must be `v` followed by three numbers.
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
-4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README, and the version, links and sizes in `site/index.html`. Check the file sizes against the release.
+4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README, and the version, links and sizes in `site/index.html`. Check the file sizes against the release. The first release with a macOS disk image also needs a macOS row in both download tables.
 
-The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. The publish job also writes `SHA256SUMS.txt` from the exact files it attaches. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
+The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm`, the AppImage and the macOS disk image, and attaches them to that release after a few minutes. If the experimental macOS build fails, the release goes out without it and `latest.json` leaves macOS out. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. The publish job also writes `SHA256SUMS.txt` from the exact files it attaches. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
 ## Contributing
 
@@ -361,7 +377,7 @@ Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbink
 
 - **Missing toolchain?** Add a `ProjectRule` to `PROJECT_RULES` in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs) (about ten lines), or a line to `cache_entries` for a global cache. Add a case to [`src-tauri/src/tests.rs`](src-tauri/src/tests.rs) that builds a fake project and checks the folder is found, and that a lookalike folder without the project file is not.
 - **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
-- Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test "tests/ui/*.test.js"`, before opening a pull request. CI runs the same checks on Windows and Linux.
+- Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test "tests/ui/*.test.js"`, before opening a pull request. CI runs the same checks on Windows, Linux and macOS.
 
 ## Signing and checksums
 

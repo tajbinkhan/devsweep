@@ -84,7 +84,9 @@ pub struct Drive {
 }
 
 /// Whether a mounted file system is a drive the user keeps files on. On Linux this skips
-/// boot partitions, snaps, container storage and the system subvolumes that btrfs mounts.
+/// boot partitions, snaps, container storage and the system subvolumes that btrfs mounts. On
+/// macOS it skips the system volumes under /System and the simulator disk images that Xcode
+/// mounts under /Library.
 #[cfg(not(windows))]
 fn is_user_drive(mount: &Path, fs: &str) -> bool {
     const FILE_SYSTEMS: &[&str] = &[
@@ -93,7 +95,7 @@ fn is_user_drive(mount: &Path, fs: &str) -> bool {
     ];
     const SYSTEM_MOUNTS: &[&str] = &[
         "/boot", "/efi", "/snap", "/var", "/usr", "/opt", "/srv", "/tmp", "/root", "/nix",
-        "/gnu", "/.snapshots", "/swap", "/System", "/private",
+        "/gnu", "/.snapshots", "/swap", "/System", "/private", "/Library",
     ];
     FILE_SYSTEMS.contains(&fs)
         && !SYSTEM_MOUNTS.iter().any(|m| mount.starts_with(m))

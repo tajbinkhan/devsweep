@@ -5,13 +5,13 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1794994376.8136783,
-    "ast_hash": "dea7681d56f5ab8b9af22ebdb97b61f4",
+    "mtime": 1795220711.901664,
+    "ast_hash": "ad04e33eb0f9f6f5210afe73eaf71958",
     "semantic_hash": ""
   },
   ".github/workflows/release.yml": {
-    "mtime": 1795219896.5147927,
-    "ast_hash": "2b436aa3c3f4e85af0157348cdf9d898",
+    "mtime": 1795220706.5924551,
+    "ast_hash": "d453551387d30324f75ef2924e096896",
     "semantic_hash": ""
   },
   "package.json": {
@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/main.rs": {
-    "mtime": 1795136167.0127547,
-    "ast_hash": "ede182480534d62b0011741eb0c04f75",
+    "mtime": 1795220645.4577563,
+    "ast_hash": "e002f7f09454a4b5f9e2e05d71ab0952",
     "semantic_hash": ""
   },
   "src-tauri/src/procs.rs": {
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/rules.rs": {
-    "mtime": 1794994376.831691,
-    "ast_hash": "5b541163cd3b441de2e79e449518d0c9",
+    "mtime": 1795220644.715407,
+    "ast_hash": "90fcbe9b8d01fceb1d4aa1bccc3a69e3",
     "semantic_hash": ""
   },
   "src-tauri/src/scan.rs": {
@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/tests.rs": {
-    "mtime": 1795136167.0142527,
-    "ast_hash": "86e4827de81acf72460248f4596cc3c5",
+    "mtime": 1795220661.7172751,
+    "ast_hash": "2648ca51356d940f2e01aa03aba6731c",
     "semantic_hash": ""
   },
   "src-tauri/tauri.conf.json": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "ui/main.js": {
-    "mtime": 1795136167.0157533,
-    "ast_hash": "a19ef81f22239896a40c7c7d88ad40b7",
+    "mtime": 1795220662.0534778,
+    "ast_hash": "4439e72a7f5aabc9edbc8b9914ff2156",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795219872.0122752,
-    "ast_hash": "5702d9bc20a8a92f128e5958832d489f",
+    "mtime": 1795220768.818472,
+    "ast_hash": "b144c82ac02cfde1d04d3ae353334805",
     "semantic_hash": ""
   },
   "ui/index.html": {
@@ -390,13 +390,13 @@
     "semantic_hash": ""
   },
   ".github/scripts/updater-manifest.mjs": {
-    "mtime": 1795136166.9922192,
-    "ast_hash": "f9ec990bcf497bc63cb0c617e43f63e3",
+    "mtime": 1795220723.1319828,
+    "ast_hash": "3fa51f05075d14b0bc38b7e12631ac29",
     "semantic_hash": ""
   },
   "src-tauri/src/updates.rs": {
-    "mtime": 1795136167.0142527,
-    "ast_hash": "f425abb501ebeaac80d4fbf76b90e114",
+    "mtime": 1795220645.824932,
+    "ast_hash": "3dadcd58c8236318db3e12c188919dd8",
     "semantic_hash": ""
   },
   ".github/scripts/mark-nsis-exe.mjs": {
@@ -410,23 +410,43 @@
     "semantic_hash": ""
   },
   ".github/workflows/pages.yml": {
-    "mtime": 1795136298.073089,
-    "ast_hash": "6b7fc077240c3e1416122f98be8db189",
+    "mtime": 1795220274.5203981,
+    "ast_hash": "777443db112ce5efa638dde3b9a58b89",
     "semantic_hash": ""
   },
   "site/index.html": {
-    "mtime": 1795219920.7598178,
-    "ast_hash": "5b9d69cd8e69874a1cb3619d5b6add2f",
+    "mtime": 1795220773.708012,
+    "ast_hash": "d9afed1217a8f7249d282cce9b375178",
     "semantic_hash": ""
   },
   "site/img/devsweep.png": {
-    "mtime": 1795136038.9941652,
+    "mtime": 1795220274.5263984,
     "ast_hash": "a3f2e46d3d5ffc5ebbbbbbccaf89d133",
     "semantic_hash": ""
   },
   "site/img/icon.png": {
-    "mtime": 1795136039.0086913,
+    "mtime": 1795220274.5269003,
     "ast_hash": "5782e8a05216aded656b49c46135a94d",
+    "semantic_hash": ""
+  },
+  "src-tauri/tauri.macos.conf.json": {
+    "mtime": 1795220670.8519046,
+    "ast_hash": "843238900446a6e2ec77d37689a7c18f",
+    "semantic_hash": ""
+  },
+  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.installer.yaml": {
+    "mtime": 1795220339.556627,
+    "ast_hash": "e89db622c3e29c1c6f3417bd9abb85f7",
+    "semantic_hash": ""
+  },
+  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.locale.en-US.yaml": {
+    "mtime": 1795220335.4748514,
+    "ast_hash": "516fc4820689ab2cbfc8c36db1629185",
+    "semantic_hash": ""
+  },
+  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.yaml": {
+    "mtime": 1795220326.5559976,
+    "ast_hash": "bc7676e0db48b0b0a653ccfc04431d47",
     "semantic_hash": ""
   }
 }

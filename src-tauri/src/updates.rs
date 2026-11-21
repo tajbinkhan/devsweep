@@ -12,8 +12,9 @@
 //! * the Linux AppImage, a single file in the user's own folders
 //!
 //! The `.deb` and `.rpm` packages update through apt or dnf, which needs root, and the
-//! portable zip has no installer. Those builds are told about the new version and offered
-//! the download page instead.
+//! portable zip has no installer. The experimental macOS app is not notarized, so it does not
+//! replace itself either. Those builds are told about the new version and offered the
+//! download page instead.
 
 use crate::Shared;
 use serde::Serialize;

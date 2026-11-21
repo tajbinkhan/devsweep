@@ -1,7 +1,8 @@
 name: Release
 
-# Publishing a GitHub Release (for example with tag v0.2.0) builds DevSweep for Windows and
-# Linux and attaches the downloads to that release. The version inside the app and in the
+# Publishing a GitHub Release (for example with tag v0.2.0) builds DevSweep for Windows, Linux
+# and macOS and attaches the downloads to that release. The macOS build is experimental: it
+# is not notarized or tested on a Mac, and a failed macOS build does not hold up the others. The version inside the app and in the
 # file names comes from the tag, so tauri.conf.json does not need editing for each release.
 #
 # Running the workflow by hand builds everything as workflow artifacts without publishing,
@@ -44,7 +45,15 @@ jobs:
           # The oldest supported Ubuntu, so the .deb and AppImage run on older glibc too.
           - name: linux
             os: ubuntu-22.04
+          # One universal app for Apple Silicon and Intel Macs. Ad-hoc signed only (see
+          # tauri.macos.conf.json), so Gatekeeper asks people to allow it the first time.
+          - name: macos
+            os: macos-latest
+            experimental: true
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            build-args: --target universal-apple-darwin
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental == true }}
     defaults:
       run:
         shell: bash
@@ -96,6 +105,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: stable
+          targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -112,7 +122,10 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npx tauri build --config "$RUNNER_TEMP/version.conf.json"
+        env:
+          BUILD_ARGS: ${{ matrix.build-args }}
+        # BUILD_ARGS is left unquoted on purpose, so an empty value adds no argument.
+        run: npx tauri build --config "$RUNNER_TEMP/version.conf.json" $BUILD_ARGS
 
       - name: Collect Windows downloads
         if: runner.os == 'Windows'
@@ -132,6 +145,16 @@ jobs:
           cp src-tauri/target/release/bundle/deb/*.deb dist/
           cp src-tauri/target/release/bundle/rpm/*.rpm dist/
           cp src-tauri/target/release/bundle/appimage/*.AppImage dist/
+
+      - name: Collect macOS downloads
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg dist/
+          # Shows in the log that the app carries the ad-hoc signature Apple Silicon needs.
+          app=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
+          codesign --verify --deep --verbose=2 "${app[0]}"
+          lipo -info "${app[0]}"/Contents/MacOS/*
 
       - name: Keep downloads as workflow artifacts
         uses: actions/upload-artifact@v4
@@ -314,7 +337,7 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Sign the installer and the AppImage
+      - name: Sign the installer, the AppImage and the disk image
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -324,7 +347,10 @@ jobs:
             echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing, so installed copies could not update."
             exit 1
           fi
-          for f in dist/*-setup.exe dist/*.AppImage; do
+          # The macOS disk image may be missing when its experimental build failed. The other
+          # two are checked by updater-manifest.mjs, which stops when either is missing.
+          shopt -s nullglob
+          for f in dist/*-setup.exe dist/*.AppImage dist/*.dmg; do
             # The version goes into the signature, so a manifest cannot pass an old download off as new.
             npx tauri signer sign --app-version "${TAG#v}" "$f"
           done

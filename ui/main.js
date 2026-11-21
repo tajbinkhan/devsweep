@@ -43,9 +43,13 @@ function applyPlatformText() {
   if (isWindows()) return;
   $("include-caches-text").textContent = "Include global caches and Docker";
   $("rule-skip").innerHTML =
-    "System folders such as <code>/usr</code> and <code>/opt</code>, <code>~/.config</code>, <code>~/.local</code>, " +
-    "<code>~/.cache</code>, Flatpak and Snap apps, editor extensions, Node version managers and <code>.git</code> " +
-    "are never scanned, so installed programs are not touched.";
+    state.platform === "macos"
+      ? "System folders such as <code>/System</code> and <code>/Library</code>, <code>/Applications</code>, " +
+        "<code>~/Library</code>, <code>~/.cache</code>, editor extensions, Node version managers and <code>.git</code> " +
+        "are never scanned, so installed programs are not touched."
+      : "System folders such as <code>/usr</code> and <code>/opt</code>, <code>~/.config</code>, <code>~/.local</code>, " +
+        "<code>~/.cache</code>, Flatpak and Snap apps, editor extensions, Node version managers and <code>.git</code> " +
+        "are never scanned, so installed programs are not touched.";
   $("confirm-fine").textContent = "Files are deleted permanently. They do not go to the Trash.";
 }
 
