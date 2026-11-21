@@ -26,7 +26,8 @@ DevSweep is a desktop app for Windows and Linux that finds the files your develo
 - [Limits](#limits)
 - [Development](#development)
 - [Contributing](#contributing)
-- [Code signing policy](#code-signing-policy)
+- [Signing and checksums](#signing-and-checksums)
+- [Privacy](#privacy)
 - [License](#license)
 
 ## Why DevSweep
@@ -78,7 +79,7 @@ The installer and the AppImage update themselves from here on. The portable zip,
 
 DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with.
 
-The Windows downloads are code-signed through SignPath. See [Code signing policy](#code-signing-policy). Releases up to 0.3.0 are not signed, and a newly signed release can still get a warning until Windows has seen enough downloads of it. Either way, SmartScreen may show "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
+The Windows downloads are not code-signed, so SmartScreen shows "Windows protected your PC" the first time you run one. Click **More info**, then **Run anyway**. To check a download before you run it, see [Signing and checksums](#signing-and-checksums). With the installer you only see this once, because later versions arrive through the built-in updater.
 
 ### Linux
 
@@ -337,7 +338,7 @@ Downloads are built only when a GitHub Release is published ([`release.yml`](.gi
 
 Once, before the first release with updates: add the updater's private key as the repository secret `TAURI_SIGNING_PRIVATE_KEY` (**Settings**, **Secrets and variables**, **Actions**). If the key has a password, add it as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The matching public key is `plugins.updater.pubkey` in [`tauri.conf.json`](src-tauri/tauri.conf.json). Keep a backup of the private key: without it, installed copies can never be updated again, and a new key pair only reaches people who download the next version by hand.
 
-Windows code signing, once SignPath has accepted the project at [signpath.org](https://signpath.org):
+Windows code signing through SignPath is built into the workflow but switched off. The free [SignPath Foundation](https://signpath.org) program looks for more public use than the project had in November 2026, so apply again once it has grown, or use a paid SignPath plan. To switch it on:
 
 1. In SignPath, create two artifact configurations with the slugs `exe` and `installer`, and paste in [`.github/signpath/exe.xml`](.github/signpath/exe.xml) and [`.github/signpath/installer.xml`](.github/signpath/installer.xml). They sign only files named DevSweep that carry the version being released. When those files change in the repository, paste them into SignPath again.
 2. Add a SignPath API token for a user with the submitter role as the repository secret `SIGNPATH_API_TOKEN`.
@@ -352,7 +353,7 @@ For each release:
 3. Write the notes, or click **Generate release notes**, then **Publish release**.
 4. Once the downloads are attached, change the version in the [Installation](#installation) section and the download link at the top of this README, and the version, links and sizes in `site/index.html`. Check the file sizes against the release.
 
-The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
+The workflow builds the Windows installer, the portable zip, the `.deb`, the `.rpm` and the AppImage, and attaches them to that release after a few minutes. The version inside the app and in the file names comes from the tag, so `tauri.conf.json` does not need editing. When SignPath is set up, a job code-signs the Windows exe and installer before anything is published. A separate job then signs the installer and the AppImage for the updater, and `latest.json` is uploaded last, so installed copies only hear about a release once its downloads are in place. The publish job also writes `SHA256SUMS.txt` from the exact files it attaches. Mark a release as a pre-release to keep it from installed copies: they follow GitHub's "latest" release. Running the Release workflow by hand from the Actions tab builds the same files as workflow artifacts without publishing anything.
 
 ## Contributing
 
@@ -362,16 +363,29 @@ Bug reports and pull requests are welcome on [GitHub](https://github.com/tajbink
 - **Something deleted that shouldn't have been, or offered that looked unsafe?** Open an issue with the folder path, what was next to it and what was inside. These are the most valuable reports.
 - Run `cargo test` and `cargo clippy --all-targets` in `src-tauri`, and `node --test "tests/ui/*.test.js"`, before opening a pull request. CI runs the same checks on Windows and Linux.
 
-## Code signing policy
+## Signing and checksums
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+Every download is built by the release workflow ([`release.yml`](.github/workflows/release.yml)) on GitHub-hosted runners, from the source at the release tag. Nothing built anywhere else is attached to a release.
 
-The release workflow ([`release.yml`](.github/workflows/release.yml)) signs the Windows installer and the exe in the portable zip. It builds them on GitHub-hosted runners from the source at the release tag, and a person approves every signing request in SignPath. Nothing built outside that workflow is signed.
+- **Windows code signing:** none yet. The release workflow can already sign through SignPath, so Windows signing starts once the project has a certificate.
+- **Updates:** signed. The installer and the AppImage that the updater installs carry a signature that DevSweep checks against the public key built into the app. See [Updates](#updates).
+- **Checksums:** each release after 0.3.0 has a `SHA256SUMS.txt` with the SHA-256 hash of every download.
 
-- Committers and reviewers: [tajbinkhan](https://github.com/tajbinkhan)
-- Approvers: [tajbinkhan](https://github.com/tajbinkhan)
+To check a Windows download, run this in PowerShell in the folder that holds it, and compare the result with the line for that file in `SHA256SUMS.txt`:
 
-Privacy: DevSweep sends nothing about you or your files anywhere. Its only network request is the update check described in [Updates](#updates), which fetches `latest.json` from GitHub Releases when DevSweep starts and once a day, and which you can turn off. Installing an update downloads it from the same place. GitHub's [privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) covers those requests.
+```powershell
+Get-FileHash .\DevSweep_*_x64-setup.exe
+```
+
+On Linux, put `SHA256SUMS.txt` next to the downloads and run:
+
+```sh
+sha256sum --check --ignore-missing SHA256SUMS.txt
+```
+
+## Privacy
+
+DevSweep sends nothing about you or your files anywhere. Its only network request is the update check described in [Updates](#updates), which fetches `latest.json` from GitHub Releases when DevSweep starts and once a day, and which you can turn off. Installing an update downloads it from the same place. GitHub's [privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) covers those requests.
 
 ## License
 

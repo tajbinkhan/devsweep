@@ -141,7 +141,7 @@ thead th { padding: 0 var(--space-md) var(--space-sm) 0; font-size: var(--text-s
 .files td a { font-family: var(--font-outlier); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .files .num { text-align: right; padding-right: 0; white-space: nowrap; color: var(--color-muted); }
 
-/* Code signing policy */
+/* Signing and checksums */
 .policy { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--space-3xl); }
 .policy__head .lead { margin-top: var(--space-lg); color: var(--color-ink-2); }
 .rows { margin: 0; }

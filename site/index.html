@@ -20,7 +20,7 @@
       <ul class="nav__links">
         <li><a href="#removes">What it removes</a></li>
         <li><a href="#safety">How it stays safe</a></li>
-        <li><a href="#code-signing-policy">Code signing policy</a></li>
+        <li><a href="#signing">Signing</a></li>
         <li><a href="https://github.com/tajbinkhan/devsweep">GitHub</a></li>
       </ul>
     </nav>
@@ -140,7 +140,7 @@
       <div class="download__text">
         <h2 id="download-title">Download DevSweep 0.3.0</h2>
         <p class="lead">Windows 10 or 11 with WebView2, or any 64-bit Linux.</p>
-        <p>The installer and the AppImage update themselves. Windows releases after 0.3.0 are code-signed through SignPath Foundation. See the <a href="#code-signing-policy">code signing policy</a>.</p>
+        <p>The installer and the AppImage update themselves. The Windows files are not code-signed yet, so Windows shows “Windows protected your PC” the first time. Click <strong>More info</strong>, then <strong>Run anyway</strong>. See <a href="#signing">signing and checksums</a>.</p>
         <p><a href="https://github.com/tajbinkhan/devsweep/releases">All releases and notes</a></p>
       </div>
       <div class="table-wrap" role="region" aria-label="Downloads" tabindex="0">
@@ -158,20 +158,24 @@
     </div>
   </section>
 
-  <section class="section section--paper" id="code-signing-policy" aria-labelledby="signing-title">
+  <section class="section section--paper" id="signing" aria-labelledby="signing-title">
     <div class="container policy">
       <div class="policy__head">
-        <h2 id="signing-title">Code signing policy</h2>
-        <p class="lead">Free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+        <h2 id="signing-title">Signing and checksums</h2>
+        <p class="lead">Every download is built on GitHub-hosted runners from the source at the release tag by the <a href="https://github.com/tajbinkhan/devsweep/blob/main/.github/workflows/release.yml">release workflow</a>.</p>
       </div>
       <dl class="rows">
         <div class="row">
-          <dt>What is signed</dt>
-          <dd>The Windows installer and the exe in the portable zip, built on GitHub-hosted runners from the source at the release tag by the <a href="https://github.com/tajbinkhan/devsweep/blob/main/.github/workflows/release.yml">release workflow</a>. A person approves every signing request.</dd>
+          <dt>Code signing</dt>
+          <dd>Not yet for the Windows files. The release workflow can already sign through SignPath, so Windows signing starts once the project has a certificate.</dd>
         </div>
         <div class="row">
-          <dt>Team</dt>
-          <dd>Committers and reviewers: <a href="https://github.com/tajbinkhan">tajbinkhan</a>. Approvers: <a href="https://github.com/tajbinkhan">tajbinkhan</a>.</dd>
+          <dt>Updates</dt>
+          <dd>Signed. DevSweep checks every update against the public key built into the app and refuses one that doesn’t match.</dd>
+        </div>
+        <div class="row">
+          <dt>Checksums</dt>
+          <dd>Each release after 0.3.0 has a <code>SHA256SUMS.txt</code>. Compare it with <code>Get-FileHash</code> in PowerShell or <code>sha256sum --check</code> on Linux.</dd>
         </div>
         <div class="row">
           <dt>Privacy</dt>
@@ -190,7 +194,7 @@
       <li><a href="https://github.com/tajbinkhan/devsweep">Source on GitHub</a></li>
       <li><a href="https://github.com/tajbinkhan/devsweep/releases">Releases</a></li>
       <li><a href="https://github.com/tajbinkhan/devsweep/issues">Report a problem</a></li>
-      <li><a href="#code-signing-policy">Code signing policy</a></li>
+      <li><a href="#signing">Signing</a></li>
       <li><a href="https://github.com/tajbinkhan/devsweep/blob/main/LICENSE">MIT license</a></li>
     </ul>
   </div>
