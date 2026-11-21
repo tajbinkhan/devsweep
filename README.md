@@ -5,7 +5,7 @@
 DevSweep is a desktop app for Windows, Linux and, as an experiment, macOS. It finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
 
 <p align="center">
-  <a href="#installation"><b>Download DevSweep 0.3.0 for Windows or Linux</b></a>
+  <a href="#installation"><b>Download DevSweep 0.4.0 for Windows, Linux or macOS</b></a>
   &nbsp;·&nbsp; <a href="#how-it-avoids-breaking-things">How it stays safe</a>
   &nbsp;·&nbsp; <a href="#how-it-compares">How it compares</a>
   &nbsp;·&nbsp; <a href="https://tajbinkhan.github.io/devsweep/">Website</a>
@@ -60,22 +60,24 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 ## Installation
 
-The current version is **0.3.0** ([release notes](https://github.com/tajbinkhan/devsweep/releases/tag/v0.3.0)). Older versions are on the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
+The current version is **0.4.0** ([release notes](https://github.com/tajbinkhan/devsweep/releases/tag/v0.4.0)). Older versions are on the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
 
 | System | Download | Size |
 |---|---|---|
-| Windows, installer | [DevSweep_0.3.0_x64-setup.exe](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_x64-setup.exe) | 3.3 MB |
-| Windows, portable | [DevSweep_0.3.0_x64-portable.zip](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_x64-portable.zip) | 4.5 MB |
-| Debian, Ubuntu, Mint, Pop!_OS | [DevSweep_0.3.0_amd64.deb](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.deb) | 4.7 MB |
-| Fedora, RHEL, openSUSE | [DevSweep-0.3.0-1.x86_64.rpm](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep-0.3.0-1.x86_64.rpm) | 4.7 MB |
-| Any Linux | [DevSweep_0.3.0_amd64.AppImage](https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.AppImage) | 83 MB |
+| Windows, installer | [DevSweep_0.4.0_x64-setup.exe](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_x64-setup.exe) | 3.3 MB |
+| Windows, portable | [DevSweep_0.4.0_x64-portable.zip](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_x64-portable.zip) | 4.5 MB |
+| Debian, Ubuntu, Mint, Pop!_OS | [DevSweep_0.4.0_amd64.deb](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_amd64.deb) | 4.7 MB |
+| Fedora, RHEL, openSUSE | [DevSweep-0.4.0-1.x86_64.rpm](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep-0.4.0-1.x86_64.rpm) | 4.7 MB |
+| Any Linux | [DevSweep_0.4.0_amd64.AppImage](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_amd64.AppImage) | 83 MB |
+| macOS 11 or later, experimental | [DevSweep_0.4.0_universal.dmg](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_universal.dmg) | 7.5 MB |
+| Checksums for all of the above | [SHA256SUMS.txt](https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/SHA256SUMS.txt) | |
 
 The installer and the AppImage update themselves from here on. The portable zip, `.deb` and `.rpm` tell you when a new version is out. See [Updates](#updates).
 
 ### Windows
 
-- `DevSweep_0.3.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
-- `DevSweep_0.3.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
+- `DevSweep_0.4.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
+- `DevSweep_0.4.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
 DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with.
 
@@ -86,22 +88,22 @@ The Windows downloads are not code-signed, so SmartScreen shows "Windows protect
 Debian, Ubuntu, Mint and Pop!_OS:
 
 ```bash
-wget https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.deb
-sudo apt install ./DevSweep_0.3.0_amd64.deb
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_amd64.deb
+sudo apt install ./DevSweep_0.4.0_amd64.deb
 ```
 
 Fedora, RHEL and openSUSE:
 
 ```bash
-sudo dnf install https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep-0.3.0-1.x86_64.rpm
+sudo dnf install https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep-0.4.0-1.x86_64.rpm
 ```
 
 Any distribution, without installing:
 
 ```bash
-wget https://github.com/tajbinkhan/devsweep/releases/download/v0.3.0/DevSweep_0.3.0_amd64.AppImage
-chmod +x DevSweep_0.3.0_amd64.AppImage
-./DevSweep_0.3.0_amd64.AppImage
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.4.0/DevSweep_0.4.0_amd64.AppImage
+chmod +x DevSweep_0.4.0_amd64.AppImage
+./DevSweep_0.4.0_amd64.AppImage
 ```
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
@@ -110,7 +112,7 @@ The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on thei
 
 The macOS build is experimental. GitHub's macOS runners build and test it, but nobody has tried it on a real Mac yet. If you do, [say how it went](https://github.com/tajbinkhan/devsweep/issues).
 
-Releases after 0.3.0 include `DevSweep_<version>_universal.dmg`, one app for Apple Silicon and Intel Macs on macOS 11 or later. Open the disk image and drag DevSweep to Applications.
+Releases from 0.4.0 on include `DevSweep_<version>_universal.dmg`, one app for Apple Silicon and Intel Macs on macOS 11 or later. Open the disk image and drag DevSweep to Applications.
 
 The app has no Apple Developer ID signature and is not notarized, so macOS blocks it the first time. Open **System Settings**, then **Privacy & Security**, scroll to the message about DevSweep and click **Open Anyway**. If macOS says the app is damaged instead, remove the download quarantine in Terminal:
 
@@ -385,7 +387,7 @@ Every download is built by the release workflow ([`release.yml`](.github/workflo
 
 - **Windows code signing:** none yet. The release workflow can already sign through SignPath, so Windows signing starts once the project has a certificate.
 - **Updates:** signed. The installer and the AppImage that the updater installs carry a signature that DevSweep checks against the public key built into the app. See [Updates](#updates).
-- **Checksums:** each release after 0.3.0 has a `SHA256SUMS.txt` with the SHA-256 hash of every download.
+- **Checksums:** each release from 0.4.0 on has a `SHA256SUMS.txt` with the SHA-256 hash of every download.
 
 To check a Windows download, run this in PowerShell in the folder that holds it, and compare the result with the line for that file in `SHA256SUMS.txt`:
 
