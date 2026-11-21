@@ -12,7 +12,14 @@ fn file(path: &Path, bytes: usize) {
 }
 
 fn fixture(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("devsweep-test-{name}-{}", std::process::id()));
+    // The macOS temp folder sits under /var, which the delete guard refuses as a system
+    // folder, so the fake projects go in the build folder there instead.
+    let base = if cfg!(target_os = "macos") {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("target").join("test-fixtures")
+    } else {
+        std::env::temp_dir()
+    };
+    let root = base.join(format!("devsweep-test-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     root
