@@ -15,7 +15,10 @@ name: Release
 # TAURI_SIGNING_PRIVATE_KEY_PASSWORD when the key has a password).
 #
 # Windows code signing goes through SignPath and needs the SIGNPATH_ORGANIZATION_ID variable
-# and the SIGNPATH_API_TOKEN secret. Without the variable, the Windows files stay unsigned.
+# and the SIGNPATH_API_TOKEN secret. Without the variable, the Windows files stay unsigned,
+# which is the case until the project has a SignPath certificate.
+#
+# The publish job attaches SHA256SUMS.txt with a hash of every download.
 
 on:
   release:
@@ -364,6 +367,15 @@ jobs:
         with:
           name: updater
           path: updater
+
+      # Hashes the exact files attached below, so people can check a download without a
+      # code signature. sha256sum's format works with `sha256sum --check`.
+      - name: Write SHA256SUMS.txt
+        working-directory: dist
+        run: |
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS.txt"
+          mv "$RUNNER_TEMP/SHA256SUMS.txt" SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Attach downloads to the release
         env:
