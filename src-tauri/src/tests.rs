@@ -728,6 +728,7 @@ fn only_installed_copies_and_appimages_update_themselves() {
     assert_eq!(mode_for(Some(BundleType::AppImage), false, false), Mode::Download, "AppImage binary run outside its image");
     assert_eq!(mode_for(Some(BundleType::Deb), false, false), Mode::Download, "apt updates .deb packages");
     assert_eq!(mode_for(Some(BundleType::Rpm), false, false), Mode::Download);
+    assert_eq!(mode_for(Some(BundleType::App), false, false), Mode::Download, "the macOS app is not notarized");
     assert_eq!(mode_for(None, true, true), Mode::Download, "a build from source");
 }
 

@@ -1,16 +1,16 @@
-# Graph Report - devsweep  (2026-11-20)
+# Graph Report - devsweep  (2026-11-21)
 
 ## Corpus Check
-- 26 files · ~51,039 words
+- 28 files · ~58,516 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 554 nodes · 1112 edges · 50 communities (30 shown, 20 thin omitted)
+- 564 nodes · 1121 edges · 51 communities (31 shown, 20 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 55 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d12c7438`
+- Built from commit: `30b3d26e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -64,6 +64,7 @@
 - updater-manifest.mjs
 - Scan, Review, Delete workflow
 - Step 02 Review (unused 30 days, locked in use, Check first)
+- bundle
 
 ## God Nodes (most connected - your core abstractions)
 1. `Item` - 28 edges
@@ -99,7 +100,7 @@
 - **Deletion dialog sequence** — ui_index_selection_footer, ui_index_confirm_dialog, ui_index_working_dialog, ui_index_report_dialog [INFERRED 0.85]
 - **Scan, Review, Delete user flow** — readme_scan_review_delete_workflow, assets_readme_workflow_scan_step, assets_readme_workflow_review_step, assets_readme_workflow_delete_step, ui_index_where_to_look, ui_index_results_table, ui_index_confirm_dialog [INFERRED 0.85]
 
-## Communities (50 total, 20 thin omitted)
+## Communities (51 total, 20 thin omitted)
 
 ### Community 0 - "Rules and Parallel Scanner"
 Cohesion: 0.14
@@ -217,8 +218,12 @@ Nodes (9): io, message(), new(), output(), Command, Duration, Result, String (+1
 Cohesion: 0.33
 Nodes (5): at, exe, [input, output], nsis, placeholder
 
+### Community 50 - "bundle"
+Cohesion: 0.20
+Nodes (9): app, dmg, bundle, category, macOS, targets, minimumSystemVersion, signingIdentity (+1 more)
+
 ## Knowledge Gaps
-- **77 isolated node(s):** `[input, output]`, `placeholder`, `nsis`, `exe`, `at` (+72 more)
+- **83 isolated node(s):** `[input, output]`, `placeholder`, `nsis`, `exe`, `at` (+78 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -226,11 +231,11 @@ Nodes (5): at, exe, [input, output], nsis, placeholder
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.138) - this node is a cross-community bridge._
+  _High betweenness centrality (0.133) - this node is a cross-community bridge._
 - **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
-  _High betweenness centrality (0.125) - this node is a cross-community bridge._
+  _High betweenness centrality (0.121) - this node is a cross-community bridge._
 - **What connects `[input, output]`, `placeholder`, `nsis` to the rest of the system?**
-  _77 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _83 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
   _Cohesion score 0.14112903225806453 - nodes in this community are weakly interconnected._
 - **Should `Tauri Commands and Elevation` be split into smaller, more focused modules?**

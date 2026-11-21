@@ -9,6 +9,10 @@
 // The updater looks for the second first. The .deb, .rpm and portable builds never install an
 // update themselves, but they find the new version through the plain name and link to the
 // download page.
+//
+// The experimental macOS disk image is listed only under the plain names, for both Mac
+// architectures, so a Mac copy hears about a new version and links to the download page. It
+// is left out when its build failed.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +34,8 @@ function entry(pattern, what) {
 
 const windows = entry(/-setup\.exe$/, "Windows installer");
 const linux = entry(/\.AppImage$/, "AppImage");
+const mac = files.some((f) => /\.dmg$/.test(f)) ? entry(/\.dmg$/, "macOS disk image") : null;
+if (!mac) console.warn("No macOS disk image, so latest.json has no macOS entry");
 
 const manifest = {
   version,
@@ -40,6 +46,7 @@ const manifest = {
     "windows-x86_64-nsis": windows,
     "linux-x86_64": linux,
     "linux-x86_64-appimage": linux,
+    ...(mac && { "darwin-aarch64": mac, "darwin-x86_64": mac }),
   },
 };
 writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n");
