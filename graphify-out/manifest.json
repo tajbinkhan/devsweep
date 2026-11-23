@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/tests.rs": {
-    "mtime": 1795220661.7172751,
-    "ast_hash": "2648ca51356d940f2e01aa03aba6731c",
+    "mtime": 1795221484.1857383,
+    "ast_hash": "90d9dad827d83468aec567f8e1682e75",
     "semantic_hash": ""
   },
   "src-tauri/tauri.conf.json": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795220768.818472,
-    "ast_hash": "b144c82ac02cfde1d04d3ae353334805",
+    "mtime": 1795222683.8769007,
+    "ast_hash": "125b17a508a8387b7a63d13436e9357d",
     "semantic_hash": ""
   },
   "ui/index.html": {
@@ -415,8 +415,8 @@
     "semantic_hash": ""
   },
   "site/index.html": {
-    "mtime": 1795220773.708012,
-    "ast_hash": "d9afed1217a8f7249d282cce9b375178",
+    "mtime": 1795222688.3172557,
+    "ast_hash": "ec67ed0756a3a45445b2e11e5fc2453b",
     "semantic_hash": ""
   },
   "site/img/devsweep.png": {
@@ -432,21 +432,6 @@
   "src-tauri/tauri.macos.conf.json": {
     "mtime": 1795220670.8519046,
     "ast_hash": "843238900446a6e2ec77d37689a7c18f",
-    "semantic_hash": ""
-  },
-  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.installer.yaml": {
-    "mtime": 1795220339.556627,
-    "ast_hash": "e89db622c3e29c1c6f3417bd9abb85f7",
-    "semantic_hash": ""
-  },
-  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.locale.en-US.yaml": {
-    "mtime": 1795220335.4748514,
-    "ast_hash": "516fc4820689ab2cbfc8c36db1629185",
-    "semantic_hash": ""
-  },
-  "packaging/winget/manifests/t/TajbinKhan/DevSweep/0.3.0/TajbinKhan.DevSweep.yaml": {
-    "mtime": 1795220326.5559976,
-    "ast_hash": "bc7676e0db48b0b0a653ccfc04431d47",
     "semantic_hash": ""
   }
 }
