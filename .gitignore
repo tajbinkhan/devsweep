@@ -4,6 +4,7 @@ src-tauri/gen/schemas/
 assets/shots/
 release/
 .impeccable/
+.hallmark/
 
 # Local one-off cleanup scripts, not part of the app
 clean_build_folders.py
