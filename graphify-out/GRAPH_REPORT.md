@@ -1,16 +1,16 @@
-# Graph Report - devsweep  (2026-11-23)
+# Graph Report - devsweep  (2026-11-24)
 
 ## Corpus Check
-- 28 files · ~58,372 words
+- 28 files · ~58,980 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 564 nodes · 1121 edges · 51 communities (31 shown, 20 thin omitted)
+- 568 nodes · 1131 edges · 51 communities (31 shown, 20 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 55 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f89bc846`
+- Built from commit: `511361c1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -108,7 +108,7 @@ Nodes (28): AtomicU64, DirEntry, fs, prelude, Action, activity_walk(), Group, is
 
 ### Community 1 - "Tauri Commands and Elevation"
 Cohesion: 0.12
-Nodes (51): Drop, Emit, Fn, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove() (+43 more)
+Nodes (51): Drop, Emit, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove(), claim() (+43 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
 Cohesion: 0.19
@@ -195,8 +195,8 @@ Cohesion: 0.20
 Nodes (23): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+15 more)
 
 ### Community 27 - "rules.rs"
-Cohesion: 0.23
-Nodes (15): cache_entries(), CacheAction, CacheEntry, has_entry(), is_candidate_name(), is_trash_name(), match_project(), never_enter_paths() (+7 more)
+Cohesion: 0.21
+Nodes (18): cache_entries(), CacheAction, CacheEntry, has_entry(), is_candidate_name(), is_trash_name(), match_project(), model_dirs() (+10 more)
 
 ### Community 28 - "output"
 Cohesion: 0.21
@@ -231,9 +231,9 @@ Nodes (9): app, dmg, bundle, category, macOS, targets, minimumSystemVersion, sig
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.133) - this node is a cross-community bridge._
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
 - **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
-  _High betweenness centrality (0.121) - this node is a cross-community bridge._
+  _High betweenness centrality (0.120) - this node is a cross-community bridge._
 - **What connects `[input, output]`, `placeholder`, `nsis` to the rest of the system?**
   _83 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
@@ -243,4 +243,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Frontend UI Logic` be split into smaller, more focused modules?**
   _Cohesion score 0.14039408866995073 - nodes in this community are weakly interconnected._
 - **Should `Fixture Test Suite` be split into smaller, more focused modules?**
-  _Cohesion score 0.11149825783972125 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10741971207087486 - nodes in this community are weakly interconnected._

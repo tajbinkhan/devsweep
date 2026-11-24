@@ -661,6 +661,34 @@ pub struct CacheEntry {
 /// how to clean it, and the programs that must not be running while it is cleaned.
 type Row = (&'static str, &'static str, PathBuf, Safety, &'static str, Option<&'static str>, CacheAction, &'static [&'static str]);
 
+/// Where machine learning tools keep downloaded models.
+pub struct ModelDirs {
+    pub hugging_face: PathBuf,
+    pub ollama: PathBuf,
+    /// LM Studio 0.3 and later, then the folder older versions used.
+    pub lm_studio: [PathBuf; 2],
+    pub torch_hub: PathBuf,
+}
+
+/// The model folders under `home`, moved by the variables each tool reads. `env` looks up a
+/// variable; one that is empty or names a relative path is ignored, so a stray setting never
+/// points a delete at DevSweep's own working folder. The tools use these folders on every OS.
+pub fn model_dirs(home: &Path, env: impl Fn(&str) -> Option<PathBuf>) -> ModelDirs {
+    let env = |var: &str| env(var).filter(|p| p.is_absolute());
+    let dot_cache = home.join(".cache");
+    ModelDirs {
+        hugging_face: env("HF_HUB_CACHE")
+            .or_else(|| env("HF_HOME").map(|h| h.join("hub")))
+            .unwrap_or_else(|| dot_cache.join("huggingface").join("hub")),
+        ollama: env("OLLAMA_MODELS").unwrap_or_else(|| home.join(".ollama").join("models")),
+        lm_studio: [home.join(".lmstudio").join("models"), dot_cache.join("lm-studio").join("models")],
+        // torch.hub reads TORCH_HOME, then XDG_CACHE_HOME, then ~/.cache, on Windows too.
+        torch_hub: env("TORCH_HOME")
+            .unwrap_or_else(|| env("XDG_CACHE_HOME").unwrap_or(dot_cache).join("torch"))
+            .join("hub"),
+    }
+}
+
 pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let home = dirs::home_dir().unwrap_or_default();
     // Windows keeps most caches in %LOCALAPPDATA%. Linux splits them between ~/.cache
@@ -687,9 +715,8 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let cargo_home = env("CARGO_HOME").unwrap_or_else(|| home.join(".cargo"));
     let go_cache = env("GOCACHE").unwrap_or_else(|| cache.join("go-build"));
     let go_mod = env("GOMODCACHE").unwrap_or_else(|| home.join("go").join("pkg").join("mod"));
-    let hf_hub = env("HF_HUB_CACHE")
-        .or_else(|| env("HF_HOME").map(|h| h.join("hub")))
-        .unwrap_or_else(|| dot_cache.join("huggingface").join("hub"));
+    let models = model_dirs(&home, env);
+    let [lm_studio, lm_studio_old] = models.lm_studio;
     let poetry = pick(local.join("pypoetry").join("Cache"), cache.join("pypoetry"));
     let deno = env("DENO_DIR").unwrap_or_else(|| pick(local.join("deno"), cache.join("deno")));
 
@@ -700,6 +727,10 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     const NUGET: &[&str] = &["dotnet", "msbuild", "nuget"];
     const GO: &[&str] = &["go"];
     const ELECTRON: &[&str] = &["electron", "electron-builder"];
+    // The Ollama server keeps loaded models open, and the Windows tray app restarts it.
+    const OLLAMA: &[&str] = &["ollama", "ollama app"];
+    // The desktop app (`LM Studio.exe`, `lm-studio` on Linux), its CLI and its headless daemon.
+    const LM_STUDIO: &[&str] = &["lm studio", "lm-studio", "lms", "llmster"];
     const NONE: &[&str] = &[];
 
     use CacheAction::*;
@@ -725,7 +756,12 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
         ("Poetry cache", "Python", poetry.join("cache"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
         ("Poetry artifacts", "Python", poetry.join("artifacts"), Safe, "Downloaded again by poetry when needed", None, RemoveContents, PY),
         ("pre-commit environments", "Python", dot_cache.join("pre-commit"), Reinstall, "Installed again by the next pre-commit run, needs network", None, RemoveContents, &["pre-commit"]),
-        ("Hugging Face models", "Machine learning", hf_hub, Reinstall, "Downloaded again on next use, needs network", Some("Models can be many GB, and gated models need your Hugging Face login to download again."), RemoveContents, NONE),
+        ("Hugging Face models", "Machine learning", models.hugging_face, Reinstall, "Downloaded again on next use, needs network", Some("Models can be many GB, and gated models need your Hugging Face login to download again."), RemoveContents, NONE),
+        ("Ollama models", "Machine learning", models.ollama, Reinstall, "ollama pull <model>, needs network", Some("Removes every model, so ollama list is empty afterwards. Models you made with ollama create are lost; the files you made them from stay."), RemoveContents, OLLAMA),
+        // LM Studio's import moves a model file into this folder, so it may hold the only copy.
+        ("LM Studio models", "Machine learning", lm_studio, Caution, "Downloaded again from LM Studio's Discover tab, needs network", Some("Models you imported from your own files are deleted too and cannot be downloaded again."), RemoveContents, LM_STUDIO),
+        ("LM Studio models", "Machine learning", lm_studio_old, Caution, "Downloaded again from LM Studio's Discover tab, needs network", Some("Models you imported from your own files are deleted too and cannot be downloaded again."), RemoveContents, LM_STUDIO),
+        ("PyTorch hub models", "Machine learning", models.torch_hub, Reinstall, "Downloaded again by torch.hub on next use, needs network", None, RemoveContents, NONE),
         ("Composer cache", "PHP", pick(local.join("Composer"), cache.join("composer")), Safe, "Downloaded again by composer when needed", None, RemoveContents, &["composer"]),
         ("Gradle caches", "Gradle", home.join(".gradle").join("caches"), Reinstall, "Downloaded again by Gradle, needs network", None, RemoveContents, GRADLE),
         ("Gradle wrapper downloads", "Gradle", home.join(".gradle").join("wrapper").join("dists"), Reinstall, "Downloaded again by ./gradlew", None, RemoveContents, GRADLE),

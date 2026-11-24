@@ -46,7 +46,7 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 - **Finds build output across every project at once.** 42 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig, Haskell, Terraform, Unity and Unreal.
 - **Only offers folders a project owns.** Each match needs its project file next to it, and ambiguous names like `build` or `target` also need a file the build tool writes inside.
-- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Hugging Face, Electron, Playwright, Cypress and more.
+- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Electron, Playwright, Cypress and more, plus downloaded AI models from Hugging Face, Ollama, LM Studio and PyTorch hub.
 - **Cleans up after Docker.** The build cache, images no container uses, stopped containers and unused volumes, measured and removed by Docker itself.
 - **Shrinks WSL disks on Windows.** A WSL distribution's `ext4.vhdx`, and Docker Desktop's data disk, grow as Linux writes files and never shrink on their own. DevSweep estimates the empty part and compacts the file to give it back to the drive.
 - **Knows which projects you still use.** "Unused for 30 days" goes by when you last worked on the project, not when its `node_modules` was installed.
@@ -204,7 +204,18 @@ devsweep clean ~/code --older-than 60 --caches --dry-run
 
 The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 
-**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Hugging Face models, Electron, Playwright, Cypress and Puppeteer downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
+**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Electron, Playwright, Cypress and Puppeteer downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
+
+**AI models.** These sit in the same Global caches list, under "Machine learning". Each row removes every model in that folder:
+
+| Row | Folder | Moved by | Marked | Locked while |
+|---|---|---|---|---|
+| Hugging Face models | `~/.cache/huggingface/hub` | `HF_HUB_CACHE`, `HF_HOME` | Needs reinstall | |
+| Ollama models | `~/.ollama/models` | `OLLAMA_MODELS` | Needs reinstall: `ollama pull` | Ollama runs |
+| LM Studio models | `~/.lmstudio/models`, or `~/.cache/lm-studio/models` before 0.3 | | Check first: imported models have no other copy | LM Studio or `lms` runs |
+| PyTorch hub models | `~/.cache/torch/hub` | `TORCH_HOME`, `XDG_CACHE_HOME` | Needs reinstall | |
+
+`~` is your user folder on Windows too. A variable that is empty or holds a relative path is ignored. A models folder you moved in LM Studio's own settings is not found.
 
 **Docker.** When Docker is running, DevSweep asks it with `docker system df` what it can free, and lists each kind under Global caches with the command that cleans it:
 
