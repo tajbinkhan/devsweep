@@ -372,6 +372,36 @@ fn default_roots_include_home_and_drives_have_a_system_one() {
 }
 
 #[test]
+fn model_folders_follow_each_tools_variables() {
+    let home = if cfg!(windows) { PathBuf::from(r"C:\Users\me") } else { PathBuf::from("/home/me") };
+    let elsewhere = if cfg!(windows) { PathBuf::from(r"D:\ai") } else { PathBuf::from("/data/ai") };
+    let dirs_with = |vars: &[(&str, &str)]| {
+        let vars: Vec<(String, PathBuf)> = vars.iter().map(|(k, v)| (k.to_string(), PathBuf::from(v))).collect();
+        rules::model_dirs(&home, move |name| vars.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()))
+    };
+
+    let d = dirs_with(&[]);
+    assert_eq!(d.hugging_face, home.join(".cache").join("huggingface").join("hub"));
+    assert_eq!(d.ollama, home.join(".ollama").join("models"));
+    assert_eq!(d.lm_studio, [home.join(".lmstudio").join("models"), home.join(".cache").join("lm-studio").join("models")]);
+    assert_eq!(d.torch_hub, home.join(".cache").join("torch").join("hub"));
+
+    let at = |name: &str| elsewhere.join(name).to_string_lossy().into_owned();
+    let d = dirs_with(&[("OLLAMA_MODELS", &at("ollama")), ("TORCH_HOME", &at("torch")), ("XDG_CACHE_HOME", &at("xdg")), ("HF_HOME", &at("hf"))]);
+    assert_eq!(d.ollama, elsewhere.join("ollama"));
+    assert_eq!(d.torch_hub, elsewhere.join("torch").join("hub"), "TORCH_HOME wins over XDG_CACHE_HOME");
+    assert_eq!(d.hugging_face, elsewhere.join("hf").join("hub"));
+
+    let d = dirs_with(&[("XDG_CACHE_HOME", &at("xdg"))]);
+    assert_eq!(d.torch_hub, elsewhere.join("xdg").join("torch").join("hub"));
+
+    // An empty or relative setting would point a delete at DevSweep's working folder.
+    let d = dirs_with(&[("OLLAMA_MODELS", ""), ("TORCH_HOME", "models")]);
+    assert_eq!(d.ollama, home.join(".ollama").join("models"));
+    assert_eq!(d.torch_hub, home.join(".cache").join("torch").join("hub"));
+}
+
+#[test]
 fn age_follows_the_project_not_only_the_build_folder() {
     let t = fixture("activity");
     // Edited today, installed long ago.
