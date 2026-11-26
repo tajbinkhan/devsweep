@@ -19,6 +19,7 @@ DevSweep is a desktop app for Windows, Linux and, as an experiment, macOS. It fi
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Scheduled cleanup](#scheduled-cleanup)
 - [Command line](#command-line)
 - [What it removes](#what-it-removes)
 - [How it avoids breaking things](#how-it-avoids-breaking-things)
@@ -54,7 +55,8 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 - **Keeps what you tell it to.** Mark a project as kept and it is never offered again.
 - **Stays out of installed programs** and system folders through a fixed exclusion list.
 - **Shows real savings before you delete.** On Linux, sizes count a hard-linked file once and leave out files shared with the pnpm store, so a pnpm `node_modules` shows what deleting it actually frees. After deleting, the report shows the change in free disk space.
-- **Exports the list** as CSV or JSON, and has a [command line](#command-line) for scripts and scheduled cleanups.
+- **Cleans up on a schedule.** Every day, week or month, through Task Scheduler, a systemd user timer or launchd, with the same checks as the window. See [Scheduled cleanup](#scheduled-cleanup).
+- **Exports the list** as CSV or JSON, and has a [command line](#command-line) for scripts.
 - **Updates itself.** The Windows installer and the AppImage download, verify and install a new release with one click. See [Updates](#updates).
 - **Runs as a normal user** and never elevates on its own.
 
@@ -162,6 +164,28 @@ Files are deleted permanently. They don't go to the Recycle Bin or the Trash, be
   sudo chown -R "$USER": ~/projects/my-app/node_modules
   ```
 
+## Scheduled cleanup
+
+Click **Schedule** next to **Scan** to have DevSweep clean up on its own every day, every Sunday or on the 1st of each month, at noon. Pick how many days a folder must go unused (7, 30, 90 or 180) and whether global caches count too. The schedule scans the folders under **Where to look** at the moment you save it.
+
+A scheduled cleanup deletes what **Select unused** would select, and checks everything again first, as the window does:
+
+- Folders marked "Check first" are never deleted: Python virtual environments, PHP `vendor`, WSL disks, LM Studio models and Android emulators.
+- Kept folders, and anything a running program or dev tool uses, are skipped.
+- Docker rows are never old enough to be picked.
+
+The window's **Schedule** dialog lists the last runs: what was deleted, how much free space came back, and anything that could not be deleted.
+
+DevSweep registers the schedule with the system's own scheduler, so nothing of DevSweep runs in the background between cleanups:
+
+| System | Registered as | If the computer is off at noon |
+|---|---|---|
+| Windows | Task Scheduler task `\DevSweep\Scheduled cleanup`, run as you without administrator rights, never on battery | Runs at the next chance |
+| Linux | systemd user timer `devsweep-cleanup.timer` in `~/.config/systemd/user` | Runs once you log in again |
+| macOS | launchd agent `dev.devsweep.app.cleanup` in `~/Library/LaunchAgents` | Runs when the Mac wakes; missed while off |
+
+On a Linux system without a systemd user session, the dialog shows a line to add with `crontab -e` instead. If you move the portable exe, open DevSweep once from its new place and it registers the schedule again. Turning the schedule off removes the task.
+
 ## Command line
 
 The same rules, checks and keep list are available without the window:
@@ -174,7 +198,7 @@ devsweep scan ~/code
 devsweep clean ~/code --older-than 60 --caches --dry-run
 ```
 
-`scan` lists what DevSweep found, with a `*` next to what `clean` would delete. `clean` deletes folders unused for `--older-than` days (30 by default) and asks first; add `--yes` to skip the question in a script or a cron job. `--json` prints the result as JSON, `--include-caution` also takes folders marked "Check first", `--caches` adds the global caches, Docker and WSL disks, and with no folder it scans your home folder and every drive except the system one. `devsweep --help` lists everything. On Linux the `.deb` and `.rpm` put `devsweep` on your `PATH`.
+`scan` lists what DevSweep found, with a `*` next to what `clean` would delete. `clean` deletes folders unused for `--older-than` days (30 by default) and asks first; add `--yes` to skip the question in a script or a cron job. `--json` prints the result as JSON, `--include-caution` also takes folders marked "Check first", `--caches` adds the global caches, Docker and WSL disks, and with no folder it scans your home folder and every drive except the system one. `devsweep scheduled` runs the [scheduled cleanup](#scheduled-cleanup) with the settings saved in the window. `devsweep --help` lists everything. On Linux the `.deb` and `.rpm` put `devsweep` on your `PATH`.
 
 ## What it removes
 
@@ -302,7 +326,8 @@ DevSweep is for the case where you want all of that in one pass, on Windows or L
 - Windows and Linux are tested on real machines. The macOS build has only run on GitHub's macOS runners. On macOS, folders that the privacy settings block show up as access denied, with advice about `chown` that does not apply.
 - On Linux the in-use check sees only your own processes. A dev server run by another user or inside a container does not lock a folder.
 - On Linux DevSweep cannot restart itself as root. Folders full of root-owned files have to be handed back with `chown` first.
-- Deletion is permanent.
+- Deletion is permanent, including by a scheduled cleanup.
+- A scheduled cleanup on Linux runs only while you are logged in, unless you run `loginctl enable-linger`.
 - On Windows, sizes count hard-linked files once per link, since Windows does not report links cheaply. The free-space change in the report is accurate.
 - On Windows the command line runs from the GUI executable, so `cmd` returns to its prompt before the output finishes. Pipe it (`devsweep scan | more`) to wait. This path is not yet tested on Windows.
 - The rule list covers common toolchains. If yours is missing, add a rule in `src-tauri/src/rules.rs`. Each rule is about ten lines.
@@ -373,6 +398,7 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `src-tauri/src/clean.rs` deletes, and holds the last-chance path checks
 - `src-tauri/src/main.rs` has the Tauri commands
 - `src-tauri/src/cli.rs` is the command line
+- `src-tauri/src/schedule.rs` registers the scheduled cleanup with Task Scheduler, systemd or launchd, and runs it
 - `src-tauri/src/docker.rs` reads `docker system df` and runs the prunes
 - `src-tauri/src/wsl.rs` finds WSL disk files, estimates their empty space and compacts them
 - `src-tauri/src/command.rs` runs docker, wsl and diskpart with a time limit
@@ -380,7 +406,7 @@ On Windows the installer lands in `src-tauri/target/release/bundle/nsis`. On Lin
 - `.github/scripts/updater-manifest.mjs` writes `latest.json` for a release
 - `site/` is the website at [tajbinkhan.github.io/devsweep](https://tajbinkhan.github.io/devsweep/), published by [`pages.yml`](.github/workflows/pages.yml) when it changes on `main`. Change its download links with each release, as with this README.
 - `.github/scripts/mark-nsis-exe.mjs` marks the installer's copy of the exe before it is code-signed, and `.github/signpath` holds the SignPath artifact configurations
-- `src-tauri/src/store.rs` saves the keep list, the last scan, WSL disk estimates and settings, and writes exports
+- `src-tauri/src/store.rs` saves the keep list, the last scan, WSL disk estimates, settings, the schedule and its last runs, and writes exports
 - `src-tauri/src/tests.rs` has the tests against fake projects
 - `tests/ui` has the tests for `ui/logic.js`
 

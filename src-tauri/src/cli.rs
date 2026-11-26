@@ -37,6 +37,7 @@ Options:
   -h, --help          Show this help
 
 Folders on the keep list, and folders a running program uses, are never deleted.
+`devsweep scheduled` runs the scheduled cleanup set up in the window.
 Exit status: 0 when everything picked was deleted, 1 when something failed, 2 for bad usage.
 ";
 
@@ -56,6 +57,10 @@ pub struct Options {
 /// `None` to start the window.
 pub fn run(args: &[String]) -> Option<i32> {
     let command = args.get(1)?.as_str();
+    // Started by the system scheduler, with no one watching. See `schedule`.
+    if command == "scheduled" {
+        return Some(crate::schedule::run_scheduled());
+    }
     if !matches!(command, "scan" | "clean" | "help" | "-h" | "--help") {
         return None;
     }

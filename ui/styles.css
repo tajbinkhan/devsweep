@@ -356,4 +356,12 @@ input[type="checkbox"]:disabled { cursor: not-allowed; }
 .update .icon-btn svg { width: 10px; height: 10px; }
 .check-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 13.5px; cursor: pointer; }
 .about-status { margin: 10px 0 0; font-size: 13px; min-height: 1.4em; }
+/* Scheduled cleanup */
+.sched-fields { display: grid; gap: 10px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; }
+.sched-fields:disabled { opacity: 0.55; }
+.sched-fields .check-row { margin: 0; }
+.modal select { margin: 0 4px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); font: inherit; }
+.sched-runs-title { margin: 14px 0 6px; font-size: 13px; }
+.sched-runs-title[hidden] { display: none; }
+#sched-how { margin-bottom: 4px; }
 .notes-body { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-size: 13px; line-height: 1.5; color: var(--text); }

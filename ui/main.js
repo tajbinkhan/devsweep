@@ -4,7 +4,7 @@ const dialog = window.__TAURI__.dialog;
 const opener = window.__TAURI__.opener;
 
 const $ = (id) => document.getElementById(id);
-const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck } = window.DevSweepLogic;
+const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel } = window.DevSweepLogic;
 
 const state = {
   roots: [],
@@ -715,6 +715,78 @@ $("check-updates").addEventListener("change", async (e) => {
 
 $("check-now").addEventListener("click", () => checkForUpdate(true));
 
+/* Scheduled cleanup */
+
+/** The saved schedule, as `devsweep scheduled` will read it. */
+let schedule = null;
+
+function renderScheduleFields() {
+  $("sched-fields").disabled = !$("sched-on").checked;
+}
+
+const SCHEDULER = {
+  windows: "Windows Task Scheduler starts it as you, without administrator rights. If the computer is off or on battery at noon, it runs at the next chance.",
+  linux: "A systemd user timer starts it. If the computer is off at noon, it runs once you log in again.",
+  macos: "launchd starts it. If the Mac is asleep at noon, it runs when it wakes.",
+};
+
+function openSchedule(status) {
+  schedule = status.schedule;
+  $("sched-on").checked = schedule.enabled;
+  $("sched-every").value = schedule.every;
+  const days = String(schedule.olderThan);
+  if (![...$("sched-days").options].some((o) => o.value === days)) $("sched-days").add(new Option(`${days} days`, days));
+  $("sched-days").value = days;
+  $("sched-caches").checked = schedule.caches;
+  // Saving takes the folders under Where to look, so that is what the dialog shows.
+  $("sched-roots").textContent = state.roots.join(", ") || "your home folder and every drive except the system one";
+  $("sched-how").textContent = SCHEDULER[state.platform] || "";
+  $("sched-runs").innerHTML = status.runs
+    .map((r) => `<li>${esc(runSummary(r))}${r.failed.map((f) => `<div class="f-path">${esc(f.path)}</div><div class="f-err">${esc(f.error)}</div>`).join("")}${r.notes.map((n) => `<div class="fine">${esc(n)}</div>`).join("")}</li>`)
+    .join("");
+  $("sched-runs-title").hidden = !status.runs.length;
+  $("sched-status").textContent = "";
+  renderScheduleFields();
+}
+
+function renderScheduleButton() {
+  $("schedule-label").textContent = scheduleLabel(schedule);
+}
+
+$("schedule-open").addEventListener("click", async () => {
+  try {
+    openSchedule(await invoke("get_schedule"));
+  } catch (err) {
+    return showNotice(String(err));
+  }
+  $("schedule").showModal();
+});
+
+$("sched-on").addEventListener("change", renderScheduleFields);
+
+$("sched-save").addEventListener("click", async () => {
+  const next = {
+    ...schedule,
+    enabled: $("sched-on").checked,
+    every: $("sched-every").value,
+    olderThan: Number($("sched-days").value),
+    caches: $("sched-caches").checked,
+    roots: state.roots,
+  };
+  $("sched-save").disabled = true;
+  $("sched-status").textContent = next.enabled ? "Registering the schedule" : "Removing the schedule";
+  try {
+    const status = await invoke("set_schedule", { schedule: next });
+    schedule = status.schedule;
+    renderScheduleButton();
+    $("schedule").close();
+  } catch (err) {
+    $("sched-status").textContent = String(err);
+  } finally {
+    $("sched-save").disabled = false;
+  }
+});
+
 /* Start */
 
 $("restart-admin").addEventListener("click", async () => {
@@ -739,6 +811,10 @@ $("restart-admin").addEventListener("click", async () => {
   try { state.settings = await invoke("get_settings"); } catch {}
   // In the background: the list must not wait for GitHub.
   if (state.settings.checkUpdates) checkForUpdate(false);
+  try {
+    schedule = (await invoke("get_schedule")).schedule;
+    renderScheduleButton();
+  } catch {}
   state.keep = await invoke("get_keep");
   renderKeep();
   applyPlatformText();
