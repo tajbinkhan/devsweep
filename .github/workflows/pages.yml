@@ -16,22 +16,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     # A manual run from another branch must not publish that branch's site.
+    # Skipping this job also skips deploy, which needs it.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      pages: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  # Deploy runs in its own job so the artifact upload has time to show up in
+  # the artifacts API. As steps in one job, deploy-pages sometimes looked it up
+  # under a second after upload and found nothing.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
