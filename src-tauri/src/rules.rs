@@ -477,6 +477,131 @@ pub const PROJECT_RULES: &[ProjectRule] = &[
         restore: "stack build",
         note: None,
     },
+    ProjectRule {
+        id: "cabal_dist",
+        dir: "dist-newstyle",
+        ecosystem: "Haskell",
+        siblings: &["*.cabal", "cabal.project"],
+        inside: &["cache", "packagedb", "build"],
+        safety: Safety::Safe,
+        restore: "cabal build",
+        note: None,
+    },
+    // More JavaScript tooling
+    ProjectRule {
+        id: "nx_cache",
+        dir: ".nx",
+        ecosystem: "Nx",
+        siblings: &["nx.json"],
+        inside: &["cache", "workspace-data"],
+        safety: Safety::Safe,
+        restore: "nx run (tasks run in full once)",
+        note: None,
+    },
+    ProjectRule {
+        id: "storybook_static",
+        dir: "storybook-static",
+        ecosystem: "Storybook",
+        siblings: JS,
+        inside: &["iframe.html"],
+        safety: Safety::Safe,
+        restore: "storybook build",
+        note: None,
+    },
+    // Mobile
+    ProjectRule {
+        id: "cocoapods",
+        dir: "Pods",
+        ecosystem: "iOS",
+        siblings: &["Podfile"],
+        inside: &["Manifest.lock"],
+        safety: Safety::Reinstall,
+        restore: "pod install",
+        note: Some("If your team commits Pods to git, git checkout brings it back instead."),
+    },
+    ProjectRule {
+        id: "android_external_native",
+        dir: ".externalNativeBuild",
+        ecosystem: "Android",
+        siblings: GRADLE,
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "gradle build",
+        note: None,
+    },
+    // Scala. `project/target` sits next to `build.properties` rather than `build.sbt`.
+    ProjectRule {
+        id: "sbt_target",
+        dir: "target",
+        ecosystem: "Scala",
+        siblings: &["build.sbt", "build.properties"],
+        inside: &["streams", "global-logging", "task-temp-directory"],
+        safety: Safety::Safe,
+        restore: "sbt compile",
+        note: None,
+    },
+    // OCaml and Erlang also use `_build`, so each needs its own project file.
+    ProjectRule {
+        id: "dune_build",
+        dir: "_build",
+        ecosystem: "OCaml",
+        siblings: &["dune-project"],
+        inside: &["log", "default"],
+        safety: Safety::Safe,
+        restore: "dune build",
+        note: None,
+    },
+    ProjectRule {
+        id: "rebar_build",
+        dir: "_build",
+        ecosystem: "Erlang",
+        siblings: &["rebar.config"],
+        inside: &["default"],
+        safety: Safety::Reinstall,
+        restore: "rebar3 compile, needs network for dependencies",
+        note: None,
+    },
+    ProjectRule {
+        id: "nox",
+        dir: ".nox",
+        ecosystem: "Python",
+        siblings: &["noxfile.py"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "nox",
+        note: None,
+    },
+    ProjectRule {
+        id: "terragrunt_cache",
+        dir: ".terragrunt-cache",
+        ecosystem: "Terraform",
+        siblings: &["terragrunt.hcl"],
+        inside: &[],
+        safety: Safety::Reinstall,
+        restore: "terragrunt init, needs network",
+        note: None,
+    },
+    // Godot 4 keeps imported assets in `.godot`, Godot 3 in `.import`.
+    ProjectRule {
+        id: "godot",
+        dir: ".godot",
+        ecosystem: "Godot",
+        siblings: &["project.godot"],
+        inside: &["imported", "editor"],
+        safety: Safety::Safe,
+        restore: "open the project in Godot (assets import again)",
+        note: Some("Close the project in Godot first."),
+    },
+    ProjectRule {
+        id: "godot3_import",
+        dir: ".import",
+        ecosystem: "Godot",
+        siblings: &["project.godot"],
+        inside: &[],
+        safety: Safety::Safe,
+        restore: "open the project in Godot (assets import again)",
+        note: Some("Close the project in Godot first."),
+    },
 ];
 
 /// Folder names the scanner never enters. These hold installed programs, editor extensions,
@@ -540,6 +665,12 @@ const NEVER_ENTER: &[&str] = &[
     ".nvm",
     "nvm",
     ".pyenv",
+    // Downloaded packages and SDKs, which carry their own project files.
+    ".pub-cache",
+    ".konan",
+    ".android",
+    ".cabal",
+    ".stack",
     // Version managers and global npm prefixes. Globally installed CLI tools sit there as
     // package.json plus node_modules and would otherwise look like projects.
     ".volta",
@@ -689,6 +820,41 @@ pub fn model_dirs(home: &Path, env: impl Fn(&str) -> Option<PathBuf>) -> ModelDi
     }
 }
 
+/// Where the Android SDK and its emulators live.
+pub struct AndroidDirs {
+    pub sdk: PathBuf,
+    /// Per-user settings, emulators and the old Gradle build cache.
+    pub user: PathBuf,
+    pub avd: PathBuf,
+}
+
+/// The Android folders, moved by the variables Android Studio and the SDK tools read.
+/// `default_sdk` is where Android Studio installs the SDK on this OS. As with
+/// [`model_dirs`], a variable that is empty or relative is ignored.
+pub fn android_dirs(home: &Path, default_sdk: PathBuf, env: impl Fn(&str) -> Option<PathBuf>) -> AndroidDirs {
+    let env = |var: &str| env(var).filter(|p| p.is_absolute());
+    let user = env("ANDROID_USER_HOME").unwrap_or_else(|| home.join(".android"));
+    AndroidDirs {
+        sdk: env("ANDROID_HOME").or_else(|| env("ANDROID_SDK_ROOT")).unwrap_or(default_sdk),
+        avd: env("ANDROID_AVD_HOME").unwrap_or_else(|| user.join("avd")),
+        user,
+    }
+}
+
+/// The cache folders of each JetBrains IDE under `root`. The IDEs keep one folder per product
+/// and version, such as `IntelliJIdea2024.3`. Only `caches` and `index` are offered, because
+/// the rest holds Local History and logs. On Windows the Toolbox app installs the IDEs
+/// themselves in the same folder, so `Toolbox` is never looked into.
+pub fn jetbrains_cache_dirs(root: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(root) else { return Vec::new() };
+    rd.flatten()
+        .filter(|e| !e.file_name().to_string_lossy().eq_ignore_ascii_case("Toolbox"))
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .flat_map(|e| ["caches", "index"].map(|sub| e.path().join(sub)))
+        .filter(|p| p.is_dir())
+        .collect()
+}
+
 pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let home = dirs::home_dir().unwrap_or_default();
     // Windows keeps most caches in %LOCALAPPDATA%. Linux splits them between ~/.cache
@@ -719,6 +885,23 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let [lm_studio, lm_studio_old] = models.lm_studio;
     let poetry = pick(local.join("pypoetry").join("Cache"), cache.join("pypoetry"));
     let deno = env("DENO_DIR").unwrap_or_else(|| pick(local.join("deno"), cache.join("deno")));
+    // Roaming AppData on Windows, ~/.config on Linux, ~/Library/Application Support on macOS.
+    let config = dirs::config_dir().unwrap_or_else(|| pick(home.join("AppData").join("Roaming"), home.join(".config")));
+    let abs_env = |var: &str| env(var).filter(|p| p.is_absolute());
+    let default_sdk = if mac {
+        home.join("Library").join("Android").join("sdk")
+    } else {
+        pick(local.join("Android").join("Sdk"), home.join("Android").join("Sdk"))
+    };
+    let android = android_dirs(&home, default_sdk, env);
+    let pub_cache = abs_env("PUB_CACHE").unwrap_or_else(|| pick(local.join("Pub").join("Cache"), home.join(".pub-cache")));
+    let konan = abs_env("KONAN_DATA_DIR").unwrap_or_else(|| home.join(".konan"));
+    let unity_cache = if mac {
+        home.join("Library").join("Unity").join("cache")
+    } else {
+        pick(local.join("Unity").join("cache"), config.join("unity3d").join("cache"))
+    };
+    let xcode = home.join("Library").join("Developer");
 
     const NODE: &[&str] = &["npm", "npx", "pnpm", "yarn", "bun"];
     const CARGO: &[&str] = &["cargo"];
@@ -731,6 +914,17 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     const OLLAMA: &[&str] = &["ollama", "ollama app"];
     // The desktop app (`LM Studio.exe`, `lm-studio` on Linux), its CLI and its headless daemon.
     const LM_STUDIO: &[&str] = &["lm studio", "lm-studio", "lms", "llmster"];
+    // The emulator runs as qemu-system-* under the `emulator` launcher.
+    const EMULATOR: &[&str] = &["emulator", "qemu-system-x86_64", "qemu-system-aarch64", "qemu-system-x86_64-headless", "sdkmanager"];
+    const XCODE: &[&str] = &["xcode", "xcodebuild", "simulator"];
+    const DART: &[&str] = &["dart", "flutter"];
+    const UNITY: &[&str] = &["unity", "unity hub"];
+    const VSCODE: &[&str] = &["code", "code - insiders", "cursor"];
+    const JETBRAINS: &[&str] = &[
+        "idea", "idea64", "pycharm", "pycharm64", "webstorm", "webstorm64", "rider", "rider64",
+        "clion", "clion64", "goland", "goland64", "rustrover", "rustrover64", "phpstorm",
+        "phpstorm64", "rubymine", "rubymine64", "datagrip", "datagrip64",
+    ];
     const NONE: &[&str] = &[];
 
     use CacheAction::*;
@@ -777,7 +971,37 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
         ("Cypress binaries", "Testing", pick(local.join("Cypress").join("Cache"), cache.join("Cypress")), Reinstall, "npx cypress install", None, RemoveContents, &["cypress"]),
         ("Puppeteer browsers", "Testing", dot_cache.join("puppeteer"), Reinstall, "npx puppeteer browsers install chrome", Some("Puppeteer scripts fail until a browser is installed again."), RemoveContents, &["puppeteer"]),
         ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents, NODE),
+        ("Gradle daemon logs", "Gradle", home.join(".gradle").join("daemon"), Safe, "Written again by the next Gradle daemon", None, RemoveContents, GRADLE),
+        ("Kotlin/Native toolchains", "Kotlin", konan, Reinstall, "Downloaded again by the next Kotlin/Native build, needs network", None, RemoveContents, GRADLE),
+        ("Android emulators", "Android", android.avd, Caution, "Create them again in Android Studio's Device Manager", Some("Deletes every emulator along with the apps and data on it."), RemoveContents, EMULATOR),
+        ("Android system images", "Android", android.sdk.join("system-images"), Reinstall, "Installed again with Android Studio's SDK Manager, needs network", Some("Emulators do not start until their system image is installed again."), RemoveContents, EMULATOR),
+        ("Android build cache", "Android", android.user.join("build-cache"), Safe, "Filled again by the next Gradle build", None, RemoveContents, GRADLE),
+        // Packages only. `bin` and `global_packages` hold tools installed with dart pub global.
+        ("Dart pub packages", "Flutter", pub_cache.join("hosted"), Reinstall, "flutter pub get or dart pub get, needs network", None, RemoveContents, DART),
+        ("Dart pub packages", "Flutter", pub_cache.join("git"), Reinstall, "flutter pub get or dart pub get, needs network", None, RemoveContents, DART),
+        ("Cabal package downloads", "Haskell", home.join(".cabal").join("packages"), Reinstall, "Downloaded again by cabal, needs network", None, RemoveContents, &["cabal"]),
+        ("Cabal package downloads", "Haskell", pick(config.join("cabal").join("packages"), cache.join("cabal").join("packages")), Reinstall, "Downloaded again by cabal, needs network", None, RemoveContents, &["cabal"]),
+        ("SwiftPM cache", "Swift", cache.join("org.swift.swiftpm"), Safe, "Downloaded again by swift build when needed", None, RemoveContents, &["swift", "swift-build", "xcodebuild"]),
+        ("CocoaPods cache", "iOS", cache.join("CocoaPods"), Safe, "Downloaded again by pod install", None, RemoveContents, &["pod"]),
+        ("Homebrew downloads", "Homebrew", cache.join("Homebrew"), Safe, "Downloaded again by brew when needed", None, RemoveContents, &["brew"]),
+        ("Unity package cache", "Unity", unity_cache, Safe, "Downloaded again by the Unity Package Manager", None, RemoveContents, UNITY),
+        ("VS Code extension downloads", "Editors", config.join("Code").join("CachedExtensionVSIXs"), Safe, "Downloaded again when an extension updates", None, RemoveContents, VSCODE),
+        ("VS Code compiled code cache", "Editors", config.join("Code").join("CachedData"), Safe, "Recreated by VS Code, which starts slower once", None, RemoveContents, VSCODE),
+        ("Cursor compiled code cache", "Editors", config.join("Cursor").join("CachedData"), Safe, "Recreated by Cursor, which starts slower once", None, RemoveContents, VSCODE),
     ];
+
+    if mac {
+        list.extend([
+            ("Xcode DerivedData", "Xcode", xcode.join("Xcode").join("DerivedData"), Safe, "Rebuilt by Xcode on the next build", None, RemoveContents, XCODE),
+            ("Xcode device support", "Xcode", xcode.join("Xcode").join("iOS DeviceSupport"), Safe, "Copied again from the device the next time it connects", None, RemoveContents, XCODE),
+            ("Xcode device support", "Xcode", xcode.join("Xcode").join("watchOS DeviceSupport"), Safe, "Copied again from the device the next time it connects", None, RemoveContents, XCODE),
+            ("Simulator caches", "Xcode", xcode.join("CoreSimulator").join("Caches"), Safe, "Recreated when a simulator starts", None, RemoveContents, XCODE),
+        ]);
+    }
+
+    for dir in jetbrains_cache_dirs(&cache.join("JetBrains")) {
+        list.push(("JetBrains IDE caches", "Editors", dir, Safe, "Rebuilt by the IDE, which indexes open projects again", None, RemoveContents, JETBRAINS));
+    }
 
     // pnpm keeps a separate store at the root of each drive that holds projects, e.g.
     // F:\.pnpm-store on Windows or /mnt/data/.pnpm-store on Linux. Linux mount points can sit

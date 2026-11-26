@@ -44,9 +44,9 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 ## Features
 
-- **Finds build output across every project at once.** 42 folder types from Node.js, Rust, Java, .NET, Flutter, CMake, Python, PHP, Elixir, Swift, Zig, Haskell, Terraform, Unity and Unreal.
+- **Finds build output across every project at once.** 54 folder types from Node.js, Rust, Java, Scala, .NET, Flutter, iOS, Android, CMake, Python, PHP, Elixir, Erlang, OCaml, Swift, Zig, Haskell, Terraform, Unity, Unreal and Godot.
 - **Only offers folders a project owns.** Each match needs its project file next to it, and ambiguous names like `build` or `target` also need a file the build tool writes inside.
-- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Electron, Playwright, Cypress and more, plus downloaded AI models from Hugging Face, Ollama, LM Studio and PyTorch hub.
+- **Cleans global package caches.** npm, Yarn, Bun, pnpm, Deno, Cargo, pip, uv, Poetry, Composer, Gradle, Maven, NuGet, Go, Dart, Cabal, Electron, Playwright, Cypress and more, the Android SDK's emulators and system images, Xcode's DerivedData, JetBrains and VS Code caches, plus downloaded AI models from Hugging Face, Ollama, LM Studio and PyTorch hub.
 - **Cleans up after Docker.** The build cache, images no container uses, stopped containers and unused volumes, measured and removed by Docker itself.
 - **Shrinks WSL disks on Windows.** A WSL distribution's `ext4.vhdx`, and Docker Desktop's data disk, grow as Linux writes files and never shrink on their own. DevSweep estimates the empty part and compacts the file to give it back to the drive.
 - **Knows which projects you still use.** "Unused for 30 days" goes by when you last worked on the project, not when its `node_modules` was installed.
@@ -200,11 +200,34 @@ devsweep clean ~/code --older-than 60 --caches --dry-run
 | Terraform `.terraform` | a `*.tf` file | `providers` or `modules` | `terraform init` |
 | Unity `Library` | `ProjectSettings/ProjectVersion.txt` | `ArtifactDB`, `PackageCache`, ... | opening the project in Unity |
 | Unreal `Intermediate`, `DerivedDataCache`, `Binaries` | a `*.uproject` file | `Intermediate` and `Binaries` need build output | building or opening the project |
+| Nx `.nx` | `nx.json` | `cache` or `workspace-data` | the next `nx run` |
+| `storybook-static` | `package.json` | `iframe.html` | `storybook build` |
+| CocoaPods `Pods` | `Podfile` | `Manifest.lock` | `pod install` |
+| Android `.externalNativeBuild` | `build.gradle(.kts)` or `settings.gradle(.kts)` | | `gradle build` |
+| Scala `target` | `build.sbt`, or `build.properties` for `project/target` | `streams`, `global-logging` or `task-temp-directory` | `sbt compile` |
+| Haskell `dist-newstyle` | `*.cabal` or `cabal.project` | `cache`, `packagedb` or `build` | `cabal build` |
+| OCaml `_build` | `dune-project` | `log` or `default` | `dune build` |
+| Erlang `_build` | `rebar.config` | `default` | `rebar3 compile` |
+| Python `.nox` | `noxfile.py` | | the next `nox` run |
+| `.terragrunt-cache` | `terragrunt.hcl` | | `terragrunt init` |
+| Godot `.godot`, `.import` | `project.godot` | `.godot` needs `imported` or `editor` | opening the project in Godot |
 | Elixir `_build`, `deps`; Swift `.build`; Zig `.zig-cache`, `zig-out`; Haskell `.stack-work`; Elm `elm-stuff`; Clojure `.cpcache` | the project file | | the usual build |
 
 The full list is in [`src-tauri/src/rules.rs`](src-tauri/src/rules.rs).
 
-**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Electron, Playwright, Cypress and Puppeteer downloads, and the TypeScript typings cache. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
+**Global caches.** These live at fixed paths in your user folder (`%LOCALAPPDATA%` on Windows; `~/.cache`, `~/.local/share` and dot folders such as `~/.npm` and `~/.cargo` on Linux): the npm, Yarn, Bun, Deno, pip, uv, Poetry and Composer caches, the pnpm store, the Cargo registry and git checkouts, sccache and ccache, the Gradle, Maven and NuGet caches, the Go build and module caches, pre-commit environments, Electron, Playwright, Cypress and Puppeteer downloads, the TypeScript typings cache, Gradle daemon logs, Kotlin/Native toolchains in `~/.konan`, the Dart pub cache (only `hosted` and `git`, so tools installed with `dart pub global activate` stay), Cabal package downloads, the SwiftPM, CocoaPods, Homebrew and Unity package caches, and the extension downloads and compiled code caches of VS Code and Cursor. DevSweep empties the cache folder and leaves the folder itself in place. For the pnpm store it runs `pnpm store prune`, which only removes packages no project uses.
+
+**IDEs and mobile SDKs.** These also sit under Global caches:
+
+| Row | Folder | Moved by | Marked | Locked while |
+|---|---|---|---|---|
+| Android emulators | `~/.android/avd` | `ANDROID_AVD_HOME`, `ANDROID_USER_HOME` | Check first: every emulator and the apps and data on it are deleted | an emulator runs |
+| Android system images | `system-images` in the SDK | `ANDROID_HOME`, `ANDROID_SDK_ROOT` | Needs reinstall: SDK Manager | an emulator or `sdkmanager` runs |
+| Android build cache | `~/.android/build-cache` | `ANDROID_USER_HOME` | Rebuilds on its own | Gradle runs |
+| Xcode DerivedData, device support, simulator caches (macOS) | `~/Library/Developer` | | Rebuilds on its own | Xcode, `xcodebuild` or Simulator runs |
+| JetBrains IDE caches | `caches` and `index` of each IDE version | | Rebuilds on its own: the IDE indexes open projects again | a JetBrains IDE runs |
+
+The SDK is looked for where Android Studio installs it: `%LOCALAPPDATA%\Android\Sdk` on Windows, `~/Android/Sdk` on Linux and `~/Library/Android/sdk` on macOS. For JetBrains, Local History and logs stay, and the Toolbox folder, where Toolbox installs the IDEs on Windows, is never touched.
 
 **AI models.** These sit in the same Global caches list, under "Machine learning". Each row removes every model in that folder:
 
@@ -253,9 +276,9 @@ Docker removes only what no container uses, and the build cache locks while a `d
 | | DevSweep | [kondo](https://github.com/tbillington/kondo) | [npkill](https://github.com/voidcosmos/npkill) | WizTree, WinDirStat | Storage Sense, Disk Cleanup | `cargo clean`, `npm cache clean` and friends |
 |---|---|---|---|---|---|---|
 | Interface | Desktop GUI | CLI, plus a separate GUI | Terminal UI | Desktop GUI | Windows Settings | Command line |
-| Finds build output across many projects | Yes, 42 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
+| Finds build output across many projects | Yes, 54 folder types | Yes, about 20 project types | `node_modules` by default, other names on request | Shows everything, knows nothing | No | One project at a time |
 | Checks the owning project file | Yes, plus a marker inside for ambiguous names | Yes | No, it matches folder names | No | n/a | n/a |
-| Global package caches | Yes, over 30 locations | No | No | Shows them | No | One tool each |
+| Global package caches | Yes, over 50 locations | No | No | Shows them | No | One tool each |
 | Docker and WSL disks | Prunes Docker, compacts WSL disks | No | No | Shows the disk files | No | `docker system prune`, `diskpart` by hand |
 | Skips folders a running program uses | Yes | No | No | No | n/a | Some tools refuse while locked |
 | Keeps out of installed apps | Fixed exclusion list | No | Flags them with a warning | No | n/a | n/a |

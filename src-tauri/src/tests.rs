@@ -539,6 +539,109 @@ fn new_rules_find_their_folders_and_skip_lookalikes() {
 }
 
 #[test]
+fn more_toolchains_find_their_folders_and_skip_lookalikes() {
+    let t = fixture("rules3");
+    file(&t.join("mono/nx.json"), 2);
+    file(&t.join("mono/.nx/cache/run.json"), 20);
+    file(&t.join("mono/package.json"), 2);
+    file(&t.join("mono/storybook-static/iframe.html"), 20);
+    file(&t.join("site/package.json"), 2);
+    file(&t.join("site/storybook-static/notes.md"), 20); // not Storybook output
+    file(&t.join("app/ios/Podfile"), 2);
+    file(&t.join("app/ios/Pods/Manifest.lock"), 20);
+    file(&t.join("pods/Pods/Manifest.lock"), 20); // no Podfile
+    file(&t.join("droid/build.gradle"), 2);
+    file(&t.join("droid/.externalNativeBuild/cmake/x"), 20);
+    file(&t.join("scala/build.sbt"), 2);
+    file(&t.join("scala/target/streams/x"), 20);
+    file(&t.join("scala/project/build.properties"), 2);
+    file(&t.join("scala/project/target/streams/y"), 20);
+    file(&t.join("hs/app.cabal"), 2);
+    file(&t.join("hs/dist-newstyle/cache/plan.json"), 20);
+    file(&t.join("ml/dune-project"), 2);
+    file(&t.join("ml/_build/log"), 20);
+    file(&t.join("erl/rebar.config"), 2);
+    file(&t.join("erl/_build/default/lib/x"), 20);
+    file(&t.join("other/_build/default/x"), 20); // no project file
+    file(&t.join("py/noxfile.py"), 2);
+    file(&t.join("py/.nox/tests/x"), 20);
+    file(&t.join("infra/terragrunt.hcl"), 2);
+    file(&t.join("infra/.terragrunt-cache/abc/main.tf"), 20);
+    file(&t.join("g4/project.godot"), 2);
+    file(&t.join("g4/.godot/imported/icon.ctex"), 20);
+    file(&t.join("g3/project.godot"), 2);
+    file(&t.join("g3/.import/icon.stex"), 20);
+    file(&t.join("notgodot/.godot/imported/x"), 20); // no project.godot
+    let items = scan_all(&t);
+    assert_eq!(
+        rel(&t, &items),
+        vec![
+            "app/ios/Pods",
+            "droid/.externalNativeBuild",
+            "erl/_build",
+            "g3/.import",
+            "g4/.godot",
+            "hs/dist-newstyle",
+            "infra/.terragrunt-cache",
+            "ml/_build",
+            "mono/.nx",
+            "mono/storybook-static",
+            "py/.nox",
+            "scala/project/target",
+            "scala/target",
+        ]
+    );
+    let _ = fs::remove_dir_all(&t);
+}
+
+#[test]
+fn android_folders_follow_the_sdk_variables() {
+    let home = if cfg!(windows) { PathBuf::from(r"C:\Users\me") } else { PathBuf::from("/home/me") };
+    let sdk = home.join("Android").join("Sdk");
+    let elsewhere = if cfg!(windows) { PathBuf::from(r"D:\android") } else { PathBuf::from("/data/android") };
+    let at = |name: &str| elsewhere.join(name).to_string_lossy().into_owned();
+    let dirs_with = |vars: &[(&str, &str)]| {
+        let vars: Vec<(String, PathBuf)> = vars.iter().map(|(k, v)| (k.to_string(), PathBuf::from(v))).collect();
+        rules::android_dirs(&home, sdk.clone(), move |name| vars.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()))
+    };
+
+    let d = dirs_with(&[]);
+    assert_eq!(d.sdk, sdk);
+    assert_eq!(d.user, home.join(".android"));
+    assert_eq!(d.avd, home.join(".android").join("avd"));
+
+    let d = dirs_with(&[("ANDROID_SDK_ROOT", &at("old")), ("ANDROID_HOME", &at("sdk")), ("ANDROID_USER_HOME", &at("user"))]);
+    assert_eq!(d.sdk, elsewhere.join("sdk"), "ANDROID_HOME wins over ANDROID_SDK_ROOT");
+    assert_eq!(d.avd, elsewhere.join("user").join("avd"), "emulators follow ANDROID_USER_HOME");
+
+    let d = dirs_with(&[("ANDROID_SDK_ROOT", &at("old")), ("ANDROID_AVD_HOME", &at("avd"))]);
+    assert_eq!(d.sdk, elsewhere.join("old"));
+    assert_eq!(d.avd, elsewhere.join("avd"));
+
+    let d = dirs_with(&[("ANDROID_HOME", ""), ("ANDROID_AVD_HOME", "avd")]);
+    assert_eq!(d.sdk, sdk);
+    assert_eq!(d.avd, home.join(".android").join("avd"));
+}
+
+#[test]
+fn jetbrains_caches_skip_toolbox_and_local_history() {
+    let t = fixture("jetbrains");
+    file(&t.join("IntelliJIdea2024.3/caches/x"), 20);
+    file(&t.join("IntelliJIdea2024.3/index/y"), 20);
+    file(&t.join("IntelliJIdea2024.3/LocalHistory/z"), 20);
+    file(&t.join("PyCharm2023.1/caches/x"), 20);
+    file(&t.join("Toolbox/caches/x"), 20); // Toolbox installs the IDEs here on Windows
+    file(&t.join("Toolbox/apps/IDEA-U/bin/idea64.exe"), 20);
+    let mut found: Vec<String> = rules::jetbrains_cache_dirs(&t)
+        .iter()
+        .map(|p| p.strip_prefix(&t).unwrap().to_string_lossy().replace('\\', "/"))
+        .collect();
+    found.sort();
+    assert_eq!(found, vec!["IntelliJIdea2024.3/caches", "IntelliJIdea2024.3/index", "PyCharm2023.1/caches"]);
+    let _ = fs::remove_dir_all(&t);
+}
+
+#[test]
 fn tools_hidden_behind_an_interpreter_are_recognised() {
     use crate::procs::script_tools;
     let tools = |name: &str, a: &[&str]| {
