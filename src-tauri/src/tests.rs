@@ -918,3 +918,55 @@ fn programs_are_found_by_full_path_in_absolute_folders_only() {
     assert!(found.is_absolute());
     let _ = fs::remove_dir_all(&t);
 }
+
+#[test]
+fn schedules_are_written_for_each_system_scheduler() {
+    use crate::schedule::{Every, launchd_plist, systemd_units, windows_task_xml};
+    let program = r#"C:\Users\A & B\DevSweep "x"\devsweep.exe"#;
+
+    let xml = windows_task_xml(program, Every::Week);
+    assert!(xml.contains(r"<Command>C:\Users\A &amp; B\DevSweep &quot;x&quot;\devsweep.exe</Command>"));
+    assert!(xml.contains("<Arguments>scheduled</Arguments>"));
+    assert!(xml.contains("<Sunday />") && xml.contains("<StartWhenAvailable>true</StartWhenAvailable>"));
+    assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"), "never runs with administrator rights");
+    assert!(windows_task_xml(program, Every::Day).contains("<DaysInterval>1</DaysInterval>"));
+    let monthly = windows_task_xml(program, Every::Month);
+    assert!(monthly.contains("<Day>1</Day>") && monthly.contains("<December />"));
+
+    let (service, timer) = systemd_units("/home/me/Apps/Dev Sweep $1 100%.AppImage", Every::Month);
+    assert!(service.contains(r#"ExecStart="/home/me/Apps/Dev Sweep $$1 100%%.AppImage" scheduled"#));
+    assert!(timer.contains("OnCalendar=*-*-01 12:00:00") && timer.contains("Persistent=true"));
+    assert!(systemd_units("/usr/bin/devsweep", Every::Week).1.contains("OnCalendar=Sun *-*-* 12:00:00"));
+
+    let plist = launchd_plist("/Applications/DevSweep.app/Contents/MacOS/devsweep", Every::Week);
+    assert!(plist.contains("<string>/Applications/DevSweep.app/Contents/MacOS/devsweep</string><string>scheduled</string>"));
+    assert!(plist.contains("<key>Weekday</key><integer>0</integer>"));
+    assert!(!launchd_plist("/x", Every::Day).contains("Weekday"));
+}
+
+#[test]
+fn a_schedule_never_takes_check_first_folders_or_fresh_ones() {
+    use crate::schedule::{Schedule, options};
+    let o = options(&Schedule { older_than: 0, roots: vec!["/code".into()], ..Schedule::default() });
+    assert_eq!(o.older_than, 1, "0 would pick Docker rows and folders in use today");
+    assert!(!o.include_caution && o.yes && o.clean && !o.dry_run);
+    assert_eq!(o.roots, vec!["/code".to_string()]);
+    assert!(!options(&Schedule::default()).roots.is_empty(), "no folders means the usual places");
+}
+
+#[test]
+#[ignore = "registers a real task; run with --ignored on Windows"]
+#[cfg(windows)]
+fn task_scheduler_accepts_the_task_without_admin_rights() {
+    let xml = crate::schedule::windows_task_xml(r"C:\Windows\System32\cmd.exe", crate::schedule::Every::Week);
+    let mut bytes = vec![0xFF, 0xFE];
+    bytes.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
+    let file = std::env::temp_dir().join("devsweep-task-test.xml");
+    fs::write(&file, bytes).unwrap();
+    let name = r"\DevSweep\Test task";
+    let ok = |args: &[&str]| std::process::Command::new("schtasks").args(args).status().unwrap().success();
+    assert!(ok(&["/Create", "/F", "/TN", name, "/XML", &file.to_string_lossy()]));
+    assert!(ok(&["/Query", "/TN", name, "/V", "/FO", "LIST"]));
+    assert!(ok(&["/Delete", "/F", "/TN", name]));
+    let _ = fs::remove_file(&file);
+}

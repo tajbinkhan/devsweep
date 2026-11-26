@@ -92,3 +92,19 @@ test("the update check repeats once a day", () => {
   assert.equal(L.dueForCheck(NOW - 23 * 3600, NOW), false);
   assert.equal(L.dueForCheck(NOW - L.DAY, NOW), true);
 });
+
+test("a scheduled run reads as one line", () => {
+  const run = (over = {}) => ({ when: daysAgo(2), deleted: 0, measuredBytes: 0, failed: [], notes: [], ...over });
+  assert.equal(L.runSummary(run(), NOW), "2 days ago: nothing was unused long enough to delete.");
+  assert.equal(L.runSummary(run({ deleted: 1, measuredBytes: 3 * 1024 ** 3 }), NOW), "2 days ago: deleted 1 folder, free space went up by 3.0 GB.");
+  assert.equal(
+    L.runSummary(run({ when: NOW - 60, deleted: 4, measuredBytes: -5, failed: [{ path: "a", error: "b" }] }), NOW),
+    "Today: deleted 4 folders, free space went up by 0 B. 1 folder could not be deleted.",
+  );
+});
+
+test("the schedule button says how often it cleans", () => {
+  assert.equal(L.scheduleLabel(null), "Schedule");
+  assert.equal(L.scheduleLabel({ enabled: false, every: "week" }), "Schedule");
+  assert.equal(L.scheduleLabel({ enabled: true, every: "month" }), "Cleans monthly");
+});

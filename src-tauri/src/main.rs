@@ -9,6 +9,7 @@ mod elevate;
 mod procs;
 mod rules;
 mod scan;
+mod schedule;
 mod store;
 #[cfg(test)]
 mod tests;
@@ -624,6 +625,8 @@ fn main() {
 
     let shared = Shared::default();
     *shared.keep.lock().unwrap() = store::load_keep();
+    // In the background: Task Scheduler or systemd must not hold up the window.
+    std::thread::spawn(schedule::refresh);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -647,7 +650,9 @@ fn main() {
             set_settings,
             updates::check_update,
             updates::install_update,
-            updates::open_releases_page
+            updates::open_releases_page,
+            schedule::get_schedule,
+            schedule::set_schedule
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevSweep");

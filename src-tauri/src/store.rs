@@ -5,6 +5,8 @@
 //! * `last-scan.json`: the result of the last finished scan, shown again on the next start
 //! * `disk-usage.json`: how full each WSL disk was the last time DevSweep could look inside
 //! * `settings.json`: choices made in the window, such as whether to check for updates
+//! * `schedule.json`: the scheduled cleanup, read by `devsweep scheduled` each time it runs
+//! * `schedule-runs.json`: what the last 20 scheduled cleanups deleted
 //!
 //! All are conveniences. A missing or unreadable file is treated as empty.
 
@@ -59,6 +61,27 @@ pub fn load_settings() -> Settings {
 
 pub fn save_settings(settings: &Settings) -> Result<(), String> {
     write("settings.json", settings)
+}
+
+pub fn load_schedule() -> crate::schedule::Schedule {
+    read("schedule.json").unwrap_or_default()
+}
+
+pub fn save_schedule(schedule: &crate::schedule::Schedule) -> Result<(), String> {
+    write("schedule.json", schedule)
+}
+
+/// The most recent scheduled cleanups, newest first.
+pub fn load_runs() -> Vec<crate::schedule::Run> {
+    read("schedule-runs.json").unwrap_or_default()
+}
+
+/// Puts a run at the front and keeps the last 20.
+pub fn add_run(run: crate::schedule::Run) -> Result<(), String> {
+    let mut runs = load_runs();
+    runs.insert(0, run);
+    runs.truncate(20);
+    write("schedule-runs.json", &runs)
 }
 
 pub fn load_keep() -> Vec<String> {

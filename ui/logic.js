@@ -107,7 +107,24 @@
     return m;
   }
 
-  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck };
+  /** One line for a scheduled cleanup, such as "2 days ago: deleted 4 folders, 3.2 GB". */
+  function runSummary(run, now = Date.now() / 1000) {
+    const folders = (n) => `${n} folder${n === 1 ? "" : "s"}`;
+    const when = fmtAge(run.when, now).replace(/^today$/, "Today").replace(/^yesterday$/, "Yesterday");
+    let text = run.deleted
+      ? `${when}: deleted ${folders(run.deleted)}, free space went up by ${fmtBytes(Math.max(0, run.measuredBytes))}`
+      : `${when}: nothing was unused long enough to delete`;
+    if (run.failed.length) text += `. ${folders(run.failed.length)} could not be deleted`;
+    return text + ".";
+  }
+
+  /** The Schedule button's text. */
+  function scheduleLabel(s) {
+    if (!s || !s.enabled) return "Schedule";
+    return { day: "Cleans daily", week: "Cleans weekly", month: "Cleans monthly" }[s.every] || "Schedule";
+  }
+
+  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DevSweepLogic = api;
 })(typeof window !== "undefined" ? window : globalThis);
