@@ -5,7 +5,7 @@
 DevSweep is a desktop app for Windows, Linux and, as an experiment, macOS. It finds the files your development tools can rebuild and deletes the ones you pick: `node_modules`, Rust and Maven `target`, Gradle and CMake `build`, .NET `bin` and `obj`, Python virtual environments, and the package caches that npm, pnpm, Cargo, Gradle, NuGet, Go and pip keep in your user folder.
 
 <p align="center">
-  <a href="#installation"><b>Download DevSweep 0.5.0 for Windows, Linux or macOS</b></a>
+  <a href="#installation"><b>Download DevSweep 0.6.0 for Windows, Linux or macOS</b></a>
   &nbsp;·&nbsp; <a href="#how-it-avoids-breaking-things">How it stays safe</a>
   &nbsp;·&nbsp; <a href="#how-it-compares">How it compares</a>
   &nbsp;·&nbsp; <a href="https://tajbinkhan.github.io/devsweep/">Website</a>
@@ -62,24 +62,24 @@ Deleting these by hand means finding them first and knowing which ones are safe.
 
 ## Installation
 
-The current version is **0.5.0** ([release notes](https://github.com/tajbinkhan/devsweep/releases/tag/v0.5.0)). Older versions are on the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
+The current version is **0.6.0** ([release notes](https://github.com/tajbinkhan/devsweep/releases/tag/v0.6.0)). Older versions are on the [Releases page](https://github.com/tajbinkhan/devsweep/releases).
 
 | System | Download | Size |
 |---|---|---|
-| Windows, installer | [DevSweep_0.5.0_x64-setup.exe](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_x64-setup.exe) | 3.3 MB |
-| Windows, portable | [DevSweep_0.5.0_x64-portable.zip](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_x64-portable.zip) | 4.6 MB |
-| Debian, Ubuntu, Mint, Pop!_OS | [DevSweep_0.5.0_amd64.deb](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_amd64.deb) | 4.7 MB |
-| Fedora, RHEL, openSUSE | [DevSweep-0.5.0-1.x86_64.rpm](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep-0.5.0-1.x86_64.rpm) | 4.7 MB |
-| Any Linux | [DevSweep_0.5.0_amd64.AppImage](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_amd64.AppImage) | 83 MB |
-| macOS 11 or later, experimental | [DevSweep_0.5.0_universal.dmg](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_universal.dmg) | 7.6 MB |
-| Checksums for all of the above | [SHA256SUMS.txt](https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/SHA256SUMS.txt) | |
+| Windows, installer | [DevSweep_0.6.0_x64-setup.exe](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_x64-setup.exe) | 3.4 MB |
+| Windows, portable | [DevSweep_0.6.0_x64-portable.zip](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_x64-portable.zip) | 4.6 MB |
+| Debian, Ubuntu, Mint, Pop!_OS | [DevSweep_0.6.0_amd64.deb](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_amd64.deb) | 4.7 MB |
+| Fedora, RHEL, openSUSE | [DevSweep-0.6.0-1.x86_64.rpm](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep-0.6.0-1.x86_64.rpm) | 4.8 MB |
+| Any Linux | [DevSweep_0.6.0_amd64.AppImage](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_amd64.AppImage) | 83 MB |
+| macOS 11 or later, experimental | [DevSweep_0.6.0_universal.dmg](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_universal.dmg) | 7.7 MB |
+| Checksums for all of the above | [SHA256SUMS.txt](https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/SHA256SUMS.txt) | |
 
 The installer and the AppImage update themselves from here on. The portable zip, `.deb` and `.rpm` tell you when a new version is out. See [Updates](#updates).
 
 ### Windows
 
-- `DevSweep_0.5.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
-- `DevSweep_0.5.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
+- `DevSweep_0.6.0_x64-setup.exe` installs DevSweep for the current user, with a Start menu entry and an uninstaller.
+- `DevSweep_0.6.0_x64-portable.zip` holds the exe on its own. Unzip and run it.
 
 DevSweep needs Windows 10 or 11 with the WebView2 runtime, which Windows 11 ships with.
 
@@ -90,22 +90,22 @@ The Windows downloads are not code-signed, so SmartScreen shows "Windows protect
 Debian, Ubuntu, Mint and Pop!_OS:
 
 ```bash
-wget https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_amd64.deb
-sudo apt install ./DevSweep_0.5.0_amd64.deb
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_amd64.deb
+sudo apt install ./DevSweep_0.6.0_amd64.deb
 ```
 
 Fedora, RHEL and openSUSE:
 
 ```bash
-sudo dnf install https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep-0.5.0-1.x86_64.rpm
+sudo dnf install https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep-0.6.0-1.x86_64.rpm
 ```
 
 Any distribution, without installing:
 
 ```bash
-wget https://github.com/tajbinkhan/devsweep/releases/download/v0.5.0/DevSweep_0.5.0_amd64.AppImage
-chmod +x DevSweep_0.5.0_amd64.AppImage
-./DevSweep_0.5.0_amd64.AppImage
+wget https://github.com/tajbinkhan/devsweep/releases/download/v0.6.0/DevSweep_0.6.0_amd64.AppImage
+chmod +x DevSweep_0.6.0_amd64.AppImage
+./DevSweep_0.6.0_amd64.AppImage
 ```
 
 The Linux builds need WebKitGTK 4.1, which the `.deb` and `.rpm` pull in on their own. They are built on Ubuntu 22.04, so they run on distributions from 2022 onward.
