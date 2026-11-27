@@ -48,6 +48,8 @@ pub fn output(cmd: Command, limit: Duration) -> io::Result<Output> {
 
 /// `output` for a program that must not be cut off half way, even when DevSweep exits.
 /// diskpart stopped while compacting leaves the disk attached and locked until a reboot.
+/// Only Windows has diskpart.
+#[cfg(windows)]
 pub fn output_to_end(cmd: Command, limit: Duration) -> io::Result<Output> {
     run(cmd, limit, false)
 }
