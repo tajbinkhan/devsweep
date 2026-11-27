@@ -49,5 +49,6 @@
   "47": "updater-manifest.mjs",
   "48": "Scan, Review, Delete workflow",
   "49": "Step 02 Review (unused 30 days, locked in use, Check first)",
-  "50": "bundle"
+  "50": "bundle",
+  "51": "cli.rs"
 }

@@ -108,3 +108,25 @@ test("the schedule button says how often it cleans", () => {
   assert.equal(L.scheduleLabel({ enabled: false, every: "week" }), "Schedule");
   assert.equal(L.scheduleLabel({ enabled: true, every: "month" }), "Cleans monthly");
 });
+
+test("the delete bar moves inside a large item but stops short of the next", () => {
+  assert.equal(L.cleanFill({ done: 0, total: 0 }), 0);
+  assert.equal(L.cleanFill({ done: 2, total: 4, freed: null, expected: 100 }), 0.5);
+  assert.equal(L.cleanFill({ done: 2, total: 4, freed: 50, expected: 100 }), 0.625);
+  assert.equal(L.cleanFill({ done: 2, total: 4, freed: 500, expected: 100 }), 2.95 / 4);
+  assert.equal(L.cleanFill({ done: 4, total: 4, freed: null, expected: 0 }), 1);
+});
+
+test("the delete status says what runs, what it freed and for how long", () => {
+  const GB = 1024 ** 3;
+  const p = (over) => ({ done: 0, total: 3, current: "C:\a", freed: 0, expected: 4 * GB, seconds: 0, ...over });
+  assert.equal(L.cleanStatus(p({ current: "" })), "");
+  assert.equal(L.cleanStatus(p({}), { action: "remove_dir" }), "Deleting files");
+  assert.equal(L.cleanStatus(p({ freed: GB, seconds: 42 }), { action: "remove_dir" }), "Deleting files · 1.0 GB of 4.0 GB freed · 42 s");
+  assert.equal(L.cleanStatus(p({ seconds: 65 }), undefined), "Deleting files · 1 min 05 s");
+  assert.equal(
+    L.cleanStatus(p({ seconds: 20 }), { action: "pnpm_prune" }),
+    "pnpm is pruning its store · 20 s. This step can take several minutes.",
+  );
+  assert.equal(L.cleanStatus(p({ freed: null, seconds: 3 }), { action: "docker_images" }), "Docker is cleaning up · 3 s");
+});

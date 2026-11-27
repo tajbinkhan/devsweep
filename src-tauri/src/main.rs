@@ -21,7 +21,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
@@ -50,12 +50,95 @@ fn refresh_flags(items: &mut [Item], keep: &[String], procs: &[procs::Proc]) {
     }
 }
 
+/// Takes each saved cache's programs from the current rules, so a change to which programs
+/// lock a cache applies to a scan saved by an older version, without scanning again.
+pub fn refresh_tools(items: &mut [Item], entries: &[rules::CacheEntry]) {
+    for item in items.iter_mut().filter(|i| i.group == Group::Cache) {
+        if let Some(e) = entries.iter().find(|e| e.id == item.id) {
+            item.tools = e.tools.iter().map(|t| t.to_string()).collect();
+        }
+    }
+}
+
 /// Running programs that use an item. See `procs::users_of`.
 fn users(item: &Item, procs: &[procs::Proc]) -> Vec<String> {
     match item.group {
         Group::Project => procs::users_of::<&str>(Path::new(&item.path), item.project.as_deref().map(Path::new), &[], procs),
         Group::Cache => procs::users_of(Path::new(&item.path), None, &item.tools, procs),
     }
+}
+
+/// `users`, as the processes themselves.
+fn using<'a>(item: &Item, procs: &'a [procs::Proc]) -> Vec<&'a procs::Proc> {
+    match item.group {
+        Group::Project => procs::using::<&str>(Path::new(&item.path), item.project.as_deref().map(Path::new), &[], procs),
+        Group::Cache => procs::using(Path::new(&item.path), None, &item.tools, procs),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserProc {
+    pid: u32,
+    name: String,
+    cmd: String,
+}
+
+fn scanned(shared: &Shared, id: &str) -> Result<Item, String> {
+    shared.items.lock().unwrap().get(id).cloned().ok_or_else(|| "Not in the last scan. Scan again first.".into())
+}
+
+/// The programs using a scanned item right now, with their command lines, so the window
+/// can show exactly what stopping them would end.
+#[tauri::command]
+async fn item_users(state: State<'_, Arc<Shared>>, id: String) -> Result<Vec<UserProc>, String> {
+    let shared = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let item = scanned(&shared, &id)?;
+        let procs = procs::snapshot();
+        Ok(using(&item, &procs)
+            .into_iter()
+            .map(|p| UserProc { pid: p.pid, name: procs::shown_name(p).to_string(), cmd: p.cmd.clone() })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StopReport {
+    stopped: usize,
+    failed: Vec<String>,
+    /// Every scanned item's programs after the stop, by id. Stopping one program often
+    /// frees several caches at once.
+    in_use: HashMap<String, Vec<String>>,
+}
+
+/// Stops the programs `pids` that use the item `id`, and what they started. Only programs
+/// that use that item at this moment are stopped, so the window cannot end anything else.
+#[tauri::command]
+async fn stop_users(state: State<'_, Arc<Shared>>, id: String, pids: Vec<u32>) -> Result<StopReport, String> {
+    let shared = state.inner().clone();
+    let _busy = claim(&shared)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let item = scanned(&shared, &id)?;
+        let procs = procs::snapshot();
+        let chosen: Vec<u32> = using(&item, &procs).iter().map(|p| p.pid).filter(|p| pids.contains(p)).collect();
+        let failed = procs::stop(&chosen, &procs);
+        let procs = procs::snapshot();
+        let mut items = shared.items.lock().unwrap();
+        let in_use = items
+            .values_mut()
+            .map(|it| {
+                it.in_use_by = users(it, &procs);
+                (it.id.clone(), it.in_use_by.clone())
+            })
+            .collect();
+        Ok(StopReport { stopped: chosen.len().saturating_sub(failed.len()), failed, in_use })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Resets the busy flag when a command finishes, even on error.
@@ -320,6 +403,15 @@ pub struct CleanProgress {
     pub done: usize,
     pub total: usize,
     pub current: String,
+    /// Scan id of the item being worked on. Empty once everything is done.
+    pub id: String,
+    /// Seconds spent on the current item so far.
+    pub seconds: u64,
+    /// Free space gained on the item's drive since the item started. `None` when the drive
+    /// is unknown or the space is freed inside a virtual machine's disk.
+    pub freed: Option<u64>,
+    /// What the item was expected to free (`Item::frees`).
+    pub expected: u64,
 }
 
 #[derive(Serialize, Clone)]
@@ -395,6 +487,10 @@ fn save_remaining(shared: &Shared) {
 /// half way through still locks its folders.
 const PROCESS_REFRESH: Duration = Duration::from_secs(3);
 
+/// How often progress is reported while one item is still being removed. A 15 GB folder or
+/// a `pnpm store prune` can take minutes, and the window must show that work goes on.
+const CLEAN_TICK: Duration = Duration::from_millis(500);
+
 pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<String>) -> CleanReport {
     let mut work: Vec<(String, Option<Item>)> = {
         let map = shared.items.lock().unwrap();
@@ -436,17 +532,50 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
             });
             continue;
         };
-        emit(CleanProgress { done: n, total, current: item.path.clone() });
         if looked.elapsed() >= PROCESS_REFRESH {
             procs = procs::snapshot();
             looked = Instant::now();
         }
 
-        let result = if is_kept(&item.path, &keep) {
-            Err("On the keep list".into())
-        } else {
-            check_and_remove(&item, &procs)
+        // Free space on the item's drive is the one measure that moves for every kind of
+        // item: a folder being deleted, pnpm pruning its store, or a WSL disk being compacted.
+        let drive = Some(drive_of(item.space_on.as_deref().unwrap_or(&item.path), &all))
+            .filter(|d| !item.in_vm && !d.is_empty())
+            .map(|d| vec![d]);
+        let start_free = drive.as_deref().map(free_space);
+        let started = Instant::now();
+        let report = |freed: Option<u64>| {
+            emit(CleanProgress {
+                done: n,
+                total,
+                current: item.path.clone(),
+                id: item.id.clone(),
+                seconds: started.elapsed().as_secs(),
+                freed,
+                expected: item.frees,
+            })
         };
+        report(start_free.map(|_| 0));
+
+        let kept = is_kept(&item.path, &keep);
+        let result: Result<(), clean::Failure> = std::thread::scope(|s| {
+            let (tx, rx) = mpsc::channel();
+            let (item, procs) = (&item, &procs);
+            s.spawn(move || {
+                let _ = tx.send(if kept { Err("On the keep list".into()) } else { check_and_remove(item, procs) });
+            });
+            loop {
+                match rx.recv_timeout(CLEAN_TICK) {
+                    Ok(result) => break result,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        let now = drive.as_deref().map(free_space);
+                        report(start_free.zip(now).map(|(a, b)| (b - a).max(0) as u64));
+                    }
+                    // The worker panicked; leaving the scope passes the panic on.
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break Err("Stopped unexpectedly".into()),
+                }
+            }
+        });
         if result.is_ok() {
             shared.items.lock().unwrap().remove(&item.id);
             if item.in_vm {
@@ -463,7 +592,7 @@ pub fn run_clean(emit: &dyn Fn(CleanProgress), shared: &Arc<Shared>, ids: Vec<St
             bytes: item.frees,
         });
     }
-    emit(CleanProgress { done: total, total, current: String::new() });
+    emit(CleanProgress { done: total, total, current: String::new(), id: String::new(), seconds: 0, freed: None, expected: 0 });
 
     let after = free_space(&mounts);
     CleanReport {
@@ -581,6 +710,8 @@ fn last_scan(state: State<'_, Arc<Shared>>) -> Option<store::SavedScan> {
     }
     let mut saved = store::load_scan()?;
     let keep = state.keep.lock().unwrap().clone();
+    let roots: Vec<PathBuf> = saved.roots.iter().map(PathBuf::from).collect();
+    refresh_tools(&mut saved.items, &rules::cache_entries(&roots));
     refresh_flags(&mut saved.items, &keep, &procs::snapshot());
     *state.items.lock().unwrap() = saved.items.iter().map(|i| (i.id.clone(), i.clone())).collect();
     Some(saved)
@@ -640,6 +771,8 @@ fn main() {
             scan,
             cancel,
             clean,
+            item_users,
+            stop_users,
             app_info,
             get_keep,
             set_keep,
