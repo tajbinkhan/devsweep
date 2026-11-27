@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, Signal, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, Signal, System, UpdateKind};
 
 pub struct Proc {
     pub pid: u32,
@@ -283,6 +283,12 @@ pub fn with_children(pids: &[u32], procs: &[Proc]) -> Vec<u32> {
     out
 }
 
+/// Whether `pid` still runs. A program that has ended but whose parent has not collected
+/// its exit status yet (a zombie on Linux) is still listed, yet holds no files.
+fn running(sys: &System, pid: Pid) -> bool {
+    sys.process(pid).is_some_and(|p| !matches!(p.status(), ProcessStatus::Zombie | ProcessStatus::Dead))
+}
+
 /// How long a program gets to exit after being asked, before it is ended outright.
 const GRACE: Duration = Duration::from_secs(3);
 
@@ -301,7 +307,7 @@ pub fn stop(pids: &[u32], procs: &[Proc]) -> Vec<String> {
         let start = Instant::now();
         loop {
             refresh(sys);
-            if ids.iter().all(|p| sys.process(*p).is_none()) || start.elapsed() >= limit {
+            if ids.iter().all(|p| !running(sys, *p)) || start.elapsed() >= limit {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -329,7 +335,7 @@ pub fn stop(pids: &[u32], procs: &[Proc]) -> Vec<String> {
     }
     wait(&mut sys, GRACE);
     pids.iter()
-        .filter(|p| sys.process(Pid::from_u32(**p)).is_some())
+        .filter(|p| running(&sys, Pid::from_u32(**p)))
         .map(|p| {
             let name = procs.iter().find(|x| x.pid == *p).map_or("A program", shown_name);
             format!("{name} (PID {p}) is still running. It may belong to another user or run as administrator.")

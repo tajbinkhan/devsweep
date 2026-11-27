@@ -42,7 +42,6 @@
   "40": "ref_node_assert",
   "41": "relaxed",
   "42": "seqcst",
-  "43": "system",
   "44": "systemtime",
   "45": "updatekind",
   "46": "write",
