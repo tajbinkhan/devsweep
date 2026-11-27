@@ -4,7 +4,7 @@ const dialog = window.__TAURI__.dialog;
 const opener = window.__TAURI__.opener;
 
 const $ = (id) => document.getElementById(id);
-const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel } = window.DevSweepLogic;
+const { fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel, cleanFill, cleanStatus } = window.DevSweepLogic;
 
 const state = {
   roots: [],
@@ -265,7 +265,74 @@ $("rows").addEventListener("click", async (e) => {
     const next = state.keep.includes(path) ? state.keep.filter((k) => k !== path) : [...state.keep, path];
     await saveKeep(next);
   }
+  const users = e.target.closest("[data-users]");
+  if (users) await askToStop(users.dataset.users);
 });
+
+/* Stopping the programs that hold a folder */
+
+/** The item and programs the stop dialog is about. */
+let stopping = null;
+
+async function askToStop(id) {
+  const it = state.items.find((i) => i.id === id);
+  if (!it) return;
+  let procs;
+  try {
+    procs = await invoke("item_users", { id });
+  } catch (err) {
+    showNotice(String(err));
+    return;
+  }
+  if (!procs.length) {
+    // The programs ended on their own since the scan.
+    await stopUsers(it, []);
+    return;
+  }
+  stopping = { it, pids: procs.map((p) => p.pid) };
+  const one = procs.length === 1;
+  $("stop-title").textContent = `Stop ${one ? "the program" : `${procs.length} programs`} using ${it.label}?`;
+  $("stop-lead").textContent =
+    `${it.path} is in use. DevSweep can stop ${one ? "this program" : "these programs"}, and anything ${one ? "it" : "they"} started, so the folder can be deleted:`;
+  $("stop-list").innerHTML = procs
+    .map((p) => `<li><div class="r-top"><span><strong>${esc(p.name)}</strong> (PID ${p.pid})</span></div><div class="r-cmd">${esc(p.cmd || "Command line not available")}</div></li>`)
+    .join("");
+  $("stop-ok").textContent = one ? "Stop program" : `Stop ${procs.length} programs`;
+  $("stop").showModal();
+}
+
+$("stop").addEventListener("close", async () => {
+  if ($("stop").returnValue !== "ok" || !stopping) return;
+  const { it, pids } = stopping;
+  stopping = null;
+  await stopUsers(it, pids);
+});
+
+async function stopUsers(it, pids) {
+  if (pids.length) showNotice(`Stopping ${pids.length === 1 ? "1 program" : `${pids.length} programs`}`);
+  let report;
+  try {
+    report = await invoke("stop_users", { id: it.id, pids });
+  } catch (err) {
+    showNotice(String(err));
+    return;
+  }
+  for (const item of state.items) {
+    if (report.inUse[item.id]) item.inUseBy = report.inUse[item.id];
+  }
+  const free = selectable(it);
+  if (free) state.selected.add(it.id);
+  render();
+  const parts = [];
+  if (report.stopped) parts.push(`Stopped ${report.stopped === 1 ? "1 program" : `${report.stopped} programs`}.`);
+  parts.push(...report.failed);
+  parts.push(
+    free
+      ? `${it.label} is selected. Click Delete selected to remove it.`
+      : `${it.label} is still in use by ${it.inUseBy.join(", ")}.`,
+  );
+  showNotice(parts.join(" "));
+}
 
 /* Tabs, search, sorting */
 
@@ -396,7 +463,7 @@ function render() {
       const badge = it.kept
         ? `<span class="badge kept" title="On the keep list">Kept</span>`
         : it.inUseBy.length
-        ? `<span class="badge locked" title="${esc(it.inUseBy.join(", "))}">In use by ${esc(it.inUseBy[0].split(" ")[0])}${it.inUseBy.length > 1 ? ` +${it.inUseBy.length - 1}` : ""}</span>`
+        ? `<button class="badge locked" type="button" data-users="${esc(it.id)}" title="In use by ${esc(it.inUseBy.join(", "))}. Click to stop ${it.inUseBy.length === 1 ? "it" : "them"}.">In use by ${esc(it.inUseBy[0].split(" ")[0])}${it.inUseBy.length > 1 ? ` +${it.inUseBy.length - 1}` : ""}</button>`
         : `<span class="badge ${s.cls}" title="${esc(it.note || "")}">${s.label}</span>`;
       // Hard links can make a folder look bigger than what deleting it gives back.
       const shared = it.bytes > it.frees * 1.1 && it.bytes - it.frees > 1024 * 1024;
@@ -508,6 +575,7 @@ $("confirm").addEventListener("close", async () => {
   const ids = selectedItems().map((i) => i.id);
   $("clean-fill").style.setProperty("--p", 0);
   $("clean-path").textContent = "";
+  $("clean-status").textContent = "";
   $("working").showModal();
   try {
     const report = await invoke("clean", { ids });
@@ -528,8 +596,9 @@ $("clean-cancel").addEventListener("click", () => {
 });
 
 listen("clean-progress", ({ payload: p }) => {
-  $("clean-fill").style.setProperty("--p", p.total ? p.done / p.total : 0);
+  $("clean-fill").style.setProperty("--p", cleanFill(p));
   $("clean-path").textContent = p.current ? `${p.done + 1} of ${p.total}: ${p.current}` : "Finishing";
+  $("clean-status").textContent = cleanStatus(p, state.items.find((i) => i.id === p.id));
 });
 
 function showReport(report, error) {

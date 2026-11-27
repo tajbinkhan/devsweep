@@ -1,12 +1,18 @@
 //! Finds running programs that use a folder, so the app never deletes files out from
 //! under a dev server, a build, or a program started from a build folder.
 
+use std::collections::HashSet;
 use std::path::Path;
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use std::time::{Duration, Instant};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, Signal, System, UpdateKind};
 
 pub struct Proc {
     pub pid: u32,
+    /// The process that started this one, if it is still known.
+    pub parent: Option<u32>,
     pub name: String,
+    /// The full command line, shown before DevSweep stops a program.
+    pub cmd: String,
     /// What this process counts as for cache locks: its name, plus tools its name hides,
     /// such as `npm` for `node npm-cli.js` or `gradle` for a Gradle daemon in `java`.
     pub tools: Vec<String>,
@@ -89,7 +95,9 @@ pub fn snapshot() -> Vec<Proc> {
             let cmd: Vec<String> = p.cmd().iter().map(|a| a.to_string_lossy().into_owned()).collect();
             Proc {
                 pid: pid.as_u32(),
+                parent: p.parent().map(|p| p.as_u32()),
                 tools: script_tools(&name, &cmd),
+                cmd: cmd.join(" "),
                 name,
                 exe: p.exe().map(norm),
                 cwd: p.cwd().map(norm),
@@ -206,11 +214,11 @@ pub fn script_tools(name: &str, cmd: &[String]) -> Vec<String> {
 /// * any program started from inside `path` (e.g. an app running from target\debug)
 /// * a dev tool whose working folder is inside `project` (e.g. `next dev` in the project)
 /// * any process named in `tools` (e.g. cargo while the cargo cache is cleaned)
-pub fn users_of<S: AsRef<str>>(path: &Path, project: Option<&Path>, tools: &[S], procs: &[Proc]) -> Vec<String> {
+pub fn using<'a, S: AsRef<str>>(path: &Path, project: Option<&Path>, tools: &[S], procs: &'a [Proc]) -> Vec<&'a Proc> {
     let tools: Vec<&str> = tools.iter().map(AsRef::as_ref).collect();
     let p = norm(path);
     let proj = project.map(norm);
-    let mut out: Vec<String> = procs
+    procs
         .iter()
         .filter(|pr| {
             let exe_inside = pr.exe.as_deref().is_some_and(|e| e.starts_with(&p));
@@ -222,11 +230,117 @@ pub fn users_of<S: AsRef<str>>(path: &Path, project: Option<&Path>, tools: &[S],
             let named = tools.iter().any(|t| pr.tools.iter().any(|x| x == t));
             exe_inside || cwd_inside || named
         })
-        .map(|pr| format!("{} (PID {})", pr.tools.iter().find(|t| **t != pr.name).unwrap_or(&pr.name), pr.pid))
-        .collect();
+        .collect()
+}
+
+/// What a process is called in the window: the tool it runs, such as `npx` for
+/// `node npx-cli.js`, or else its own name.
+pub fn shown_name(pr: &Proc) -> &str {
+    pr.tools.iter().find(|t| **t != pr.name).unwrap_or(&pr.name)
+}
+
+/// `using`, as "npx (PID 1234)" labels.
+pub fn users_of<S: AsRef<str>>(path: &Path, project: Option<&Path>, tools: &[S], procs: &[Proc]) -> Vec<String> {
+    let mut out: Vec<String> =
+        using(path, project, tools, procs).into_iter().map(|pr| format!("{} (PID {})", shown_name(pr), pr.pid)).collect();
     out.sort();
     out.dedup();
     out
+}
+
+/// DevSweep and every program above it: the terminal or launcher that started it. These
+/// are never stopped, whatever they run.
+fn protected(procs: &[Proc]) -> HashSet<u32> {
+    let mut out = HashSet::new();
+    let mut next = Some(std::process::id());
+    while let Some(pid) = next {
+        if !out.insert(pid) {
+            break;
+        }
+        next = procs.iter().find(|p| p.pid == pid).and_then(|p| p.parent);
+    }
+    out
+}
+
+/// `pids` and every process they started, children before parents, so a parent cannot
+/// start a replacement for a child that was just stopped. DevSweep itself and the
+/// programs above it are left out.
+pub fn with_children(pids: &[u32], procs: &[Proc]) -> Vec<u32> {
+    let mut out: Vec<u32> = pids.to_vec();
+    let mut i = 0;
+    while i < out.len() {
+        let parent = out[i];
+        for child in procs.iter().filter(|p| p.parent == Some(parent) && p.pid != parent) {
+            if !out.contains(&child.pid) {
+                out.push(child.pid);
+            }
+        }
+        i += 1;
+    }
+    let keep = protected(procs);
+    out.retain(|p| !keep.contains(p));
+    out.reverse();
+    out
+}
+
+/// Whether `pid` still runs. A program that has ended but whose parent has not collected
+/// its exit status yet (a zombie on Linux) is still listed, yet holds no files.
+fn running(sys: &System, pid: Pid) -> bool {
+    sys.process(pid).is_some_and(|p| !matches!(p.status(), ProcessStatus::Zombie | ProcessStatus::Dead))
+}
+
+/// How long a program gets to exit after being asked, before it is ended outright.
+const GRACE: Duration = Duration::from_secs(3);
+
+/// Stops `pids` and the processes they started (see `with_children`), then waits for them
+/// to exit. On Linux and macOS each first gets SIGTERM and a few seconds to finish; Windows
+/// has no such request for a program without a window, so it is ended at once. Returns a
+/// message for each of `pids` that is still running.
+pub fn stop(pids: &[u32], procs: &[Proc]) -> Vec<String> {
+    let targets = with_children(pids, procs);
+    let Ok(mut sys) = System::new() else { return vec!["Could not read the list of running programs".into()] };
+    let ids: Vec<Pid> = targets.iter().map(|p| Pid::from_u32(*p)).collect();
+    let refresh = |sys: &mut System| {
+        sys.refresh_processes_specifics(ProcessesToUpdate::Some(&ids), true, ProcessRefreshKind::nothing());
+    };
+    let wait = |sys: &mut System, limit: Duration| {
+        let start = Instant::now();
+        loop {
+            refresh(sys);
+            if ids.iter().all(|p| !running(sys, *p)) || start.elapsed() >= limit {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    };
+    refresh(&mut sys);
+    let mut asked = false;
+    for pid in &ids {
+        if let Some(p) = sys.process(*pid) {
+            match p.kill_with(Signal::Term) {
+                Some(_) => asked = true,
+                None => {
+                    p.kill();
+                }
+            }
+        }
+    }
+    if asked {
+        wait(&mut sys, GRACE);
+        for pid in &ids {
+            if let Some(p) = sys.process(*pid) {
+                p.kill();
+            }
+        }
+    }
+    wait(&mut sys, GRACE);
+    pids.iter()
+        .filter(|p| running(&sys, Pid::from_u32(**p)))
+        .map(|p| {
+            let name = procs.iter().find(|x| x.pid == *p).map_or("A program", shown_name);
+            format!("{name} (PID {p}) is still running. It may belong to another user or run as administrator.")
+        })
+        .collect()
 }
 
 /// Names of build tools and dev servers that are running right now.
@@ -239,4 +353,45 @@ pub fn running_dev_tools(procs: &[Proc]) -> Vec<String> {
     names.sort();
     names.dedup();
     names
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn proc(pid: u32, parent: Option<u32>) -> Proc {
+        Proc { pid, parent, name: "node".into(), cmd: String::new(), tools: vec!["node".into()], exe: None, cwd: None }
+    }
+
+    #[test]
+    fn stopping_takes_children_along_but_never_devsweep_or_its_parents() {
+        let me = std::process::id();
+        let launcher = me.wrapping_add(1_000_000);
+        let procs = vec![
+            proc(launcher, None),
+            proc(me, Some(launcher)),
+            proc(10, None),
+            proc(11, Some(10)),
+            proc(12, Some(11)),
+            proc(20, None),
+        ];
+        // Grandchild first, the asked-for program last.
+        assert_eq!(with_children(&[10], &procs), vec![12, 11, 10]);
+        // A program that started DevSweep is protected, and so is DevSweep below it.
+        assert_eq!(with_children(&[launcher], &procs), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn stop_ends_a_running_program() {
+        let mut child = if cfg!(windows) {
+            crate::command::new("ping").args(["-n", "60", "127.0.0.1"]).spawn().unwrap()
+        } else {
+            crate::command::new("sleep").arg("60").spawn().unwrap()
+        };
+        let procs = snapshot();
+        assert!(procs.iter().any(|p| p.pid == child.id()));
+        let failed = stop(&[child.id()], &procs);
+        assert!(failed.is_empty(), "{failed:?}");
+        assert!(child.try_wait().unwrap().is_some(), "the program is gone");
+    }
 }

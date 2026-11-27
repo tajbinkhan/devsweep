@@ -144,10 +144,24 @@
     </form>
   </dialog>
 
+  <dialog class="modal" id="stop">
+    <form method="dialog">
+      <h2 id="stop-title">Stop programs?</h2>
+      <p class="modal-lead" id="stop-lead"></p>
+      <ul class="restore-list" id="stop-list"></ul>
+      <p class="warn">A stopped program ends without saving its work. If another app started it, such as an editor or Claude Code, that app may need a restart to get it back.</p>
+      <div class="modal-actions">
+        <button class="btn ghost" value="cancel" type="submit">Cancel</button>
+        <button class="btn danger" value="ok" type="submit" id="stop-ok">Stop programs</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="modal" id="working">
     <h2>Deleting</h2>
     <div class="progress-bar"><div class="progress-fill" id="clean-fill"></div></div>
     <p class="progress-path" id="clean-path"></p>
+    <p class="clean-status" id="clean-status"></p>
     <div class="modal-actions">
       <button class="btn ghost" id="clean-cancel" type="button">Stop after current folder</button>
     </div>

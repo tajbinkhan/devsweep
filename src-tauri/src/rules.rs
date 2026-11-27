@@ -855,6 +855,13 @@ pub fn jetbrains_cache_dirs(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Programs that lock the Node.js caches while they install or fetch packages.
+pub const NODE_TOOLS: &[&str] = &["npm", "pnpm", "yarn", "bun"];
+/// The npm cache also has npx: it runs its packages from the cache's `_npx` folder for as
+/// long as it runs, which for an MCP server or a dev tool can be all day. npx touches no
+/// other cache, so it does not lock them.
+pub const NPM_CACHE_TOOLS: &[&str] = &["npm", "npx", "pnpm", "yarn", "bun"];
+
 pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     let home = dirs::home_dir().unwrap_or_default();
     // Windows keeps most caches in %LOCALAPPDATA%. Linux splits them between ~/.cache
@@ -903,7 +910,6 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     };
     let xcode = home.join("Library").join("Developer");
 
-    const NODE: &[&str] = &["npm", "npx", "pnpm", "yarn", "bun"];
     const CARGO: &[&str] = &["cargo"];
     const PY: &[&str] = &["pip", "uv", "poetry"];
     const GRADLE: &[&str] = &["gradle"];
@@ -931,13 +937,13 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     use Safety::*;
     let pnpm_note = Some("Uses pnpm store prune. Freed space is often less than the store size.");
     let mut list: Vec<Row> = vec![
-        ("npm cache", "Node.js", pick(local.join("npm-cache"), home.join(".npm").join("_cacache")), Safe, "Downloaded again by npm when needed", None, RemoveContents, NODE),
-        ("Yarn cache", "Node.js", pick(local.join("Yarn").join("Cache"), cache.join("yarn")), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE),
-        ("Yarn Berry cache", "Node.js", home.join(".yarn").join("berry").join("cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE),
-        ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents, NODE),
-        ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
-        ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE),
-        ("pnpm store", "Node.js", pnpm_home.join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE),
+        ("npm cache", "Node.js", pick(local.join("npm-cache"), home.join(".npm").join("_cacache")), Safe, "Downloaded again by npm when needed", None, RemoveContents, NPM_CACHE_TOOLS),
+        ("Yarn cache", "Node.js", pick(local.join("Yarn").join("Cache"), cache.join("yarn")), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE_TOOLS),
+        ("Yarn Berry cache", "Node.js", home.join(".yarn").join("berry").join("cache"), Safe, "Downloaded again by yarn when needed", None, RemoveContents, NODE_TOOLS),
+        ("Bun cache", "Node.js", home.join(".bun").join("install").join("cache"), Safe, "Downloaded again by bun when needed", None, RemoveContents, NODE_TOOLS),
+        ("node-gyp headers", "Node.js", pick(local.join("node-gyp").join("Cache"), cache.join("node-gyp")), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE_TOOLS),
+        ("node-gyp headers", "Node.js", home.join(".node-gyp"), Safe, "Downloaded again when a native module builds", None, RemoveContents, NODE_TOOLS),
+        ("pnpm store", "Node.js", pnpm_home.join("store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE_TOOLS),
         ("Deno cache", "Deno", deno, Safe, "Downloaded again by deno when needed", None, RemoveContents, &["deno"]),
         ("Cargo registry sources", "Rust", cargo_home.join("registry").join("src"), Safe, "Unpacked again from the local registry cache by cargo", None, RemoveContents, CARGO),
         ("Cargo registry downloads", "Rust", cargo_home.join("registry").join("cache"), Reinstall, "Downloaded again by cargo, needs network", None, RemoveContents, CARGO),
@@ -970,7 +976,7 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
         ("Playwright browsers", "Testing", pick(local.join("ms-playwright"), cache.join("ms-playwright")), Reinstall, "npx playwright install", Some("Playwright tests fail until browsers are installed again."), RemoveContents, &["playwright"]),
         ("Cypress binaries", "Testing", pick(local.join("Cypress").join("Cache"), cache.join("Cypress")), Reinstall, "npx cypress install", None, RemoveContents, &["cypress"]),
         ("Puppeteer browsers", "Testing", dot_cache.join("puppeteer"), Reinstall, "npx puppeteer browsers install chrome", Some("Puppeteer scripts fail until a browser is installed again."), RemoveContents, &["puppeteer"]),
-        ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents, NODE),
+        ("TypeScript typings cache", "Node.js", pick(local.join("Microsoft").join("TypeScript"), cache.join("typescript")), Safe, "Recreated by the editor", None, RemoveContents, NODE_TOOLS),
         ("Gradle daemon logs", "Gradle", home.join(".gradle").join("daemon"), Safe, "Written again by the next Gradle daemon", None, RemoveContents, GRADLE),
         ("Kotlin/Native toolchains", "Kotlin", konan, Reinstall, "Downloaded again by the next Kotlin/Native build, needs network", None, RemoveContents, GRADLE),
         ("Android emulators", "Android", android.avd, Caution, "Create them again in Android Studio's Device Manager", Some("Deletes every emulator along with the apps and data on it."), RemoveContents, EMULATOR),
@@ -1009,7 +1015,7 @@ pub fn cache_entries(scan_roots: &[PathBuf]) -> Vec<CacheEntry> {
     for root in scan_roots {
         let tops: Vec<&Path> = if win { root.ancestors().last().into_iter().collect() } else { root.ancestors().collect() };
         for top in tops {
-            list.push(("pnpm store", "Node.js", top.join(".pnpm-store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE));
+            list.push(("pnpm store", "Node.js", top.join(".pnpm-store"), Safe, "Prunes only packages that no project uses", pnpm_note, PnpmPrune, NODE_TOOLS));
         }
     }
 

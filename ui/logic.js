@@ -124,7 +124,40 @@
     return { day: "Cleans daily", week: "Cleans weekly", month: "Cleans monthly" }[s.every] || "Schedule";
   }
 
-  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel };
+  /** How far the delete bar is filled, 0 to 1. Inside one item it moves with the space freed
+   *  so far, so a large folder does not look stalled, but stops short of the next item. */
+  function cleanFill(p) {
+    if (!p.total) return 0;
+    const part = p.freed != null && p.expected > 0 ? Math.min(p.freed / p.expected, 0.95) : 0;
+    return Math.min((p.done + part) / p.total, 1);
+  }
+
+  /** "1 min 05 s" */
+  function fmtSeconds(s) {
+    return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
+  }
+
+  /** The line under the path while deleting: what is happening, space freed so far and time
+   *  spent, such as "Deleting files · 2.1 GB of 15.4 GB freed · 42 s". Empty when done. */
+  function cleanStatus(p, item = {}) {
+    if (!p.current) return "";
+    const slow = isDocker(item) || isDisk(item) || item.action === "pnpm_prune";
+    const step = isDocker(item)
+      ? "Docker is cleaning up"
+      : isDisk(item)
+        ? "Compacting the disk"
+        : item.action === "pnpm_prune"
+          ? "pnpm is pruning its store"
+          : "Deleting files";
+    const parts = [step];
+    if (p.freed > 0) parts.push(p.expected > 0 ? `${fmtBytes(p.freed)} of ${fmtBytes(p.expected)} freed` : `${fmtBytes(p.freed)} freed`);
+    if (p.seconds >= 2) parts.push(fmtSeconds(p.seconds));
+    let text = parts.join(" · ");
+    if (slow && p.seconds >= 15) text += ". This step can take several minutes.";
+    return text;
+  }
+
+  const api = { DAY, fmtBytes, fmtAge, ageDays, selectable, picksUnused, rangeIds, maxOf, isDocker, isDisk, noun, fellShort, downloadLabel, showsUpdate, dueForCheck, runSummary, scheduleLabel, cleanFill, cleanStatus };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DevSweepLogic = api;
 })(typeof window !== "undefined" ? window : globalThis);

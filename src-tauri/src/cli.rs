@@ -231,7 +231,20 @@ fn execute(mut o: Options) -> i32 {
     let ids: Vec<String> = picked.iter().map(|i| i.id.clone()).collect();
     let progress = |p: CleanProgress| {
         if live && !p.current.is_empty() {
-            eprint!("\r\x1b[KDeleting {} of {}: {}", p.done + 1, p.total, p.current);
+            // On a long item, show that work goes on: space freed so far and time spent.
+            let status = match p.freed {
+                _ if p.seconds < 2 => String::new(),
+                Some(f) if f > 0 => format!(" ({} freed, {} s)", fmt_bytes(f), p.seconds),
+                _ => format!(" ({} s)", p.seconds),
+            };
+            // A line that wraps cannot be redrawn in place, so a long path keeps its end only.
+            let chars: Vec<char> = p.current.chars().collect();
+            let path = if chars.len() > 60 {
+                format!("...{}", chars[chars.len() - 57..].iter().collect::<String>())
+            } else {
+                p.current.clone()
+            };
+            eprint!("\r\x1b[KDeleting {} of {}{status}: {path}", p.done + 1, p.total);
         }
     };
     let report = crate::run_clean(&progress, &shared, ids);

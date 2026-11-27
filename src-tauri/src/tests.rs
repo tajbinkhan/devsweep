@@ -473,8 +473,14 @@ fn delete_leaves_nothing_behind_and_a_leftover_is_offered_again() {
     let items = scan_all(&t);
     assert_eq!(rel(&t, &items), vec!["web/node_modules.1700000000.devsweep-trash"]);
     assert_eq!(items[0].rule_id, "devsweep_trash");
-    let report = crate::run_clean(&|_| {}, &shared_with(&items), vec![items[0].id.clone()]);
+    let seen = std::cell::RefCell::new(Vec::new());
+    let report = crate::run_clean(&|p| seen.borrow_mut().push(p), &shared_with(&items), vec![items[0].id.clone()]);
     assert!(report.outcomes[0].ok, "{:?}", report.outcomes[0].error);
+    // Progress names the item and what it should free, and ends with an empty entry.
+    let seen = seen.into_inner();
+    assert_eq!(seen[0].id, items[0].id);
+    assert_eq!(seen[0].expected, items[0].frees);
+    assert!(seen.last().unwrap().current.is_empty());
     assert!(trash_in(&t.join("web")).is_none());
     assert!(t.join("web/package.json").exists());
     let _ = fs::remove_dir_all(&t);
@@ -969,4 +975,39 @@ fn task_scheduler_accepts_the_task_without_admin_rights() {
     assert!(ok(&["/Query", "/TN", name, "/V", "/FO", "LIST"]));
     assert!(ok(&["/Delete", "/F", "/TN", name]));
     let _ = fs::remove_file(&file);
+}
+
+#[test]
+fn a_running_npx_locks_only_the_npm_cache() {
+    use rules::{NODE_TOOLS, NPM_CACHE_TOOLS};
+    assert!(NPM_CACHE_TOOLS.contains(&"npx"));
+    assert!(!NODE_TOOLS.contains(&"npx"));
+    // Installs still lock every Node.js cache.
+    assert!(NODE_TOOLS.iter().all(|t| NPM_CACHE_TOOLS.contains(t)));
+    // Every Node.js cache that exists here uses one of the two lists, and only the npm
+    // cache has npx.
+    for e in rules::cache_entries(&[]).iter().filter(|e| e.ecosystem == "Node.js") {
+        let expected = if e.label == "npm cache" { NPM_CACHE_TOOLS } else { NODE_TOOLS };
+        assert_eq!(e.tools, expected, "{}", e.label);
+    }
+
+    // A scan saved by an older version takes the new lists without scanning again.
+    let entry = rules::CacheEntry {
+        id: "cache:pnpm".into(),
+        label: "pnpm store",
+        ecosystem: "Node.js",
+        path: PathBuf::from("pnpm"),
+        safety: rules::Safety::Safe,
+        restore: "",
+        note: None,
+        action: rules::CacheAction::PnpmPrune,
+        tools: NODE_TOOLS,
+    };
+    let engine = crate::docker::parse_info("linux	Docker Desktop	/var/lib/docker").unwrap();
+    let usage = crate::docker::Usage { kind: crate::docker::Kind::Images, size: 1, reclaimable: 1 };
+    let saved = crate::scan::Item { tools: vec!["npx".into()], ..crate::docker::item(&usage, &engine, 0) };
+    let mut items = vec![crate::scan::Item { id: entry.id.clone(), ..saved.clone() }, saved];
+    crate::refresh_tools(&mut items, &[entry]);
+    assert_eq!(items[0].tools, NODE_TOOLS);
+    assert_eq!(items[1].tools, ["npx"], "an item no rule covers keeps its list");
 }
