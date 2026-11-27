@@ -40,18 +40,18 @@
     "semantic_hash": ""
   },
   "src-tauri/src/main.rs": {
-    "mtime": 1795741156.7895477,
-    "ast_hash": "73a428abbd0931bb0c046416affaa22f",
+    "mtime": 1795742600.2257473,
+    "ast_hash": "398c72da9078549c21bbf8afef923a5d",
     "semantic_hash": ""
   },
   "src-tauri/src/procs.rs": {
-    "mtime": 1795741184.3370264,
-    "ast_hash": "49ae7a94380a834bf91969deaea8fa85",
+    "mtime": 1795742949.862584,
+    "ast_hash": "e0dab15351f2b14d9f26c458d233b430",
     "semantic_hash": ""
   },
   "src-tauri/src/rules.rs": {
-    "mtime": 1795657310.96107,
-    "ast_hash": "10a3f7a6661b4971587f17f2470a9fe9",
+    "mtime": 1795742600.2267473,
+    "ast_hash": "abff1a05401f377dc1c6b801b1722ff5",
     "semantic_hash": ""
   },
   "src-tauri/src/scan.rs": {
@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/tests.rs": {
-    "mtime": 1795740631.4268334,
-    "ast_hash": "8e5664af0cddc2f995691ae80647807c",
+    "mtime": 1795742600.2272472,
+    "ast_hash": "0891d24fe866eec80b6194b66613aba5",
     "semantic_hash": ""
   },
   "src-tauri/tauri.conf.json": {
@@ -75,7 +75,7 @@
     "semantic_hash": ""
   },
   "ui/main.js": {
-    "mtime": 1795741225.0575676,
+    "mtime": 1795742600.2282472,
     "ast_hash": "c298b189c93ca1864f863ab71e9b8aa9",
     "semantic_hash": ""
   },
@@ -90,7 +90,7 @@
     "semantic_hash": ""
   },
   "ui/index.html": {
-    "mtime": 1795741225.4314623,
+    "mtime": 1795742600.2277472,
     "ast_hash": "455642922ff77131a6519559351211e0",
     "semantic_hash": ""
   },
@@ -115,7 +115,7 @@
     "semantic_hash": "a3f2e46d3d5ffc5ebbbbbbccaf89d133"
   },
   "src-tauri/src/cli.rs": {
-    "mtime": 1795740768.5137565,
+    "mtime": 1795742600.2257473,
     "ast_hash": "25cc672191e02e99c7c12ba5f190c660",
     "semantic_hash": ""
   },
@@ -125,12 +125,12 @@
     "semantic_hash": ""
   },
   "tests/ui/logic.test.js": {
-    "mtime": 1795740558.711526,
-    "ast_hash": "7de2f859d923cb67b1a4cb6e33d40fba",
+    "mtime": 1795742600.2272472,
+    "ast_hash": "52d2b8ad074b02b00d0fdfed1a729668",
     "semantic_hash": ""
   },
   "ui/logic.js": {
-    "mtime": 1795740546.7241125,
+    "mtime": 1795742600.2277472,
     "ast_hash": "8a9852cb1133bdec0a10faac57ee4f89",
     "semantic_hash": ""
   },
