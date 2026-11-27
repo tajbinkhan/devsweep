@@ -45,8 +45,8 @@
     "semantic_hash": ""
   },
   "src-tauri/src/procs.rs": {
-    "mtime": 1795742777.5978076,
-    "ast_hash": "6154b3af5e28591fb928fddd1724093c",
+    "mtime": 1795742949.862584,
+    "ast_hash": "e0dab15351f2b14d9f26c458d233b430",
     "semantic_hash": ""
   },
   "src-tauri/src/rules.rs": {

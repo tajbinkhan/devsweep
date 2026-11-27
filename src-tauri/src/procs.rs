@@ -392,6 +392,12 @@ mod tests {
         assert!(procs.iter().any(|p| p.pid == child.id()));
         let failed = stop(&[child.id()], &procs);
         assert!(failed.is_empty(), "{failed:?}");
-        assert!(child.try_wait().unwrap().is_some(), "the program is gone");
+        // `stop` counts a zombie as stopped, and macOS can show one a moment before the
+        // parent is able to collect it, so give the exit a little time to arrive.
+        let start = Instant::now();
+        while child.try_wait().unwrap().is_none() {
+            assert!(start.elapsed() < Duration::from_secs(5), "the program is gone");
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 }
