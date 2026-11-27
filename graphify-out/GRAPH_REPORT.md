@@ -1,16 +1,16 @@
 # Graph Report - devsweep  (2026-11-27)
 
 ## Corpus Check
-- 29 files · ~66,429 words
+- 29 files · ~67,442 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 643 nodes · 1370 edges · 51 communities (32 shown, 19 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 61 edges (avg confidence: 0.85)
+- 667 nodes · 1423 edges · 51 communities (32 shown, 19 thin omitted)
+- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 58 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `21cdb1a5`
+- Built from commit: `0f72b60c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -103,28 +103,28 @@
 ## Communities (51 total, 19 thin omitted)
 
 ### Community 0 - "Rules and Parallel Scanner"
-Cohesion: 0.16
-Nodes (27): AtomicU64, DirEntry, Action, activity_walk(), Group, is_link(), is_reparse_point(), Item (+19 more)
+Cohesion: 0.14
+Nodes (28): AtomicU64, DirEntry, fs, prelude, Action, activity_walk(), Group, is_link() (+20 more)
 
 ### Community 1 - "Tauri Commands and Elevation"
-Cohesion: 0.12
-Nodes (58): Drop, Emit, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove(), claim() (+50 more)
+Cohesion: 0.11
+Nodes (59): Emit, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove(), claim(), clean() (+51 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
 Cohesion: 0.19
 Nodes (13): cache_entries, CI workflow (ci.yml, Windows and Linux), Fixed scanner exclusion list, In-use folder locking, kondo, Limits (no macOS, Linux own-process lock only, no root restart), procs.rs (running programs using a folder), Project folder ownership rule (project file next to it, marker inside) (+5 more)
 
 ### Community 4 - "CI Workflow Config"
-Cohesion: 0.16
-Nodes (28): File, fs, Output, the_diskpart_script_cannot_be_changed_while_it_runs(), wsl_disks_are_found_in_the_registry_and_estimated(), compact(), decode(), Disk (+20 more)
+Cohesion: 0.19
+Nodes (26): File, Output, wsl_disks_are_found_in_the_registry_and_estimated(), compact(), decode(), Disk, diskpart(), disks() (+18 more)
 
 ### Community 5 - "Frontend UI Logic"
 Cohesion: 0.12
 Nodes (31): ageTitle(), applyPlatformText(), askToStop(), checkForUpdate(), esc(), fileManager(), isWindows(), keepPath() (+23 more)
 
 ### Community 6 - "Safe Deletion Guards"
-Cohesion: 0.18
-Nodes (29): Error, From, prelude, clear_readonly(), denied(), Failure, find_program(), guard() (+21 more)
+Cohesion: 0.19
+Nodes (28): Error, From, clear_readonly(), denied(), Failure, find_program(), guard(), is_dir_link() (+20 more)
 
 ### Community 7 - "Fixture Test Suite"
 Cohesion: 0.09
@@ -143,8 +143,8 @@ Cohesion: 0.22
 Nodes (14): DevSweep App Screenshot, Detected Artifact Types (Rust target, Python .venv, CMake build, Node node_modules, Flutter build, Next.js .next), Selection Summary and Delete Selected Footer, Drive Free Space Meters (C:, D:, F:), Filter, Select Unused For N Days, Clear Selection, How It Comes Back Recovery Badges, Include Global Package Caches Toggle, Last Changed Age Highlight (+6 more)
 
 ### Community 11 - "schedule.rs"
-Cohesion: 0.15
-Nodes (34): duration, apply(), Every, Failed, get_schedule(), launchd_plist(), options(), plist_path() (+26 more)
+Cohesion: 0.16
+Nodes (33): apply(), Every, Failed, get_schedule(), launchd_plist(), options(), plist_path(), program() (+25 more)
 
 ### Community 12 - "npm Package Manifest"
 Cohesion: 0.17
@@ -191,8 +191,8 @@ Cohesion: 0.40
 Nodes (5): Global package caches cleaning, pnpm store prune, Project folders / Global caches tabs, Scan progress bar with Cancel, Where to look section (roots, Add folder, Scan, include caches)
 
 ### Community 26 - "docker.rs"
-Cohesion: 0.22
-Nodes (22): action(), docker(), Engine, item(), Kind, kind_of(), parse_df(), parse_info() (+14 more)
+Cohesion: 0.20
+Nodes (23): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+15 more)
 
 ### Community 27 - "rules.rs"
 Cohesion: 0.21
@@ -211,8 +211,8 @@ Cohesion: 0.29
 Nodes (5): [dist, version, tag, repo, out], files, linux, manifest, windows
 
 ### Community 48 - "Scan, Review, Delete workflow"
-Cohesion: 0.33
-Nodes (9): io, message(), new(), output(), Command, Duration, Result, String (+1 more)
+Cohesion: 0.12
+Nodes (30): Child, FnMut, HANDLE, io, Send, a_program_is_on_the_exit_list_only_while_it_runs(), a_timeout_stops_the_program_under_the_wrapper_too(), adopt() (+22 more)
 
 ### Community 49 - "Step 02 Review (unused 30 days, locked in use, Check first)"
 Cohesion: 0.33
@@ -235,16 +235,16 @@ Nodes (18): arc, age_days(), attach_console(), days(), execute(), fmt_age(), fmt
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
-  _High betweenness centrality (0.134) - this node is a cross-community bridge._
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **What connects `[input, output]`, `placeholder`, `nsis` to the rest of the system?**
   _84 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
+  _Cohesion score 0.14112903225806453 - nodes in this community are weakly interconnected._
 - **Should `Tauri Commands and Elevation` be split into smaller, more focused modules?**
-  _Cohesion score 0.11694915254237288 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11422527763088314 - nodes in this community are weakly interconnected._
 - **Should `Frontend UI Logic` be split into smaller, more focused modules?**
   _Cohesion score 0.11764705882352941 - nodes in this community are weakly interconnected._
 - **Should `Fixture Test Suite` be split into smaller, more focused modules?**
-  _Cohesion score 0.09485815602836879 - nodes in this community are weakly interconnected._
-- **Should `Tauri App Config` be split into smaller, more focused modules?**
-  _Cohesion score 0.06666666666666667 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09183673469387756 - nodes in this community are weakly interconnected._

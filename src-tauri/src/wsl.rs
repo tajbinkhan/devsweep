@@ -280,7 +280,8 @@ mod imp {
         let result = command::system("diskpart.exe")
             .and_then(|mut cmd| {
                 cmd.arg("/s").arg(&script);
-                command::output(cmd, limit)
+                // Stopped half way, diskpart would leave the disk attached and locked.
+                command::output_to_end(cmd, limit)
             });
         drop(lock);
         let _ = fs::remove_file(&script);

@@ -1,16 +1,16 @@
 # Graph Report - devsweep  (2026-11-27)
 
 ## Corpus Check
-- 29 files · ~66,380 words
+- 29 files · ~67,436 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 641 nodes · 1366 edges · 52 communities (32 shown, 20 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 61 edges (avg confidence: 0.85)
+- 667 nodes · 1423 edges · 51 communities (32 shown, 19 thin omitted)
+- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 58 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `132be574`
+- Built from commit: `dd6afa79`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -57,7 +57,6 @@
 - ref_node_assert
 - relaxed
 - seqcst
-- system
 - systemtime
 - updatekind
 - write
@@ -101,15 +100,15 @@
 - **Deletion dialog sequence** — ui_index_selection_footer, ui_index_confirm_dialog, ui_index_working_dialog, ui_index_report_dialog [INFERRED 0.85]
 - **Scan, Review, Delete user flow** — readme_scan_review_delete_workflow, assets_readme_workflow_scan_step, assets_readme_workflow_review_step, assets_readme_workflow_delete_step, ui_index_where_to_look, ui_index_results_table, ui_index_confirm_dialog [INFERRED 0.85]
 
-## Communities (52 total, 20 thin omitted)
+## Communities (51 total, 19 thin omitted)
 
 ### Community 0 - "Rules and Parallel Scanner"
-Cohesion: 0.16
-Nodes (27): AtomicU64, DirEntry, Action, activity_walk(), Group, is_link(), is_reparse_point(), Item (+19 more)
+Cohesion: 0.14
+Nodes (28): AtomicU64, DirEntry, fs, prelude, Action, activity_walk(), Group, is_link() (+20 more)
 
 ### Community 1 - "Tauri Commands and Elevation"
-Cohesion: 0.12
-Nodes (58): Drop, Emit, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove(), claim() (+50 more)
+Cohesion: 0.11
+Nodes (59): Emit, app_info(), AppInfo, BusyGuard, cancel(), check_and_remove(), claim(), clean() (+51 more)
 
 ### Community 2 - "Project folder ownership rule (project file next to it, marker inside)"
 Cohesion: 0.19
@@ -117,27 +116,27 @@ Nodes (13): cache_entries, CI workflow (ci.yml, Windows and Linux), Fixed scanne
 
 ### Community 4 - "CI Workflow Config"
 Cohesion: 0.19
-Nodes (25): File, Output, compact(), decode(), Disk, diskpart(), disks(), estimate_frees() (+17 more)
+Nodes (26): File, Output, wsl_disks_are_found_in_the_registry_and_estimated(), compact(), decode(), Disk, diskpart(), disks() (+18 more)
 
 ### Community 5 - "Frontend UI Logic"
 Cohesion: 0.12
 Nodes (31): ageTitle(), applyPlatformText(), askToStop(), checkForUpdate(), esc(), fileManager(), isWindows(), keepPath() (+23 more)
 
 ### Community 6 - "Safe Deletion Guards"
-Cohesion: 0.17
-Nodes (30): Error, From, prelude, clear_readonly(), denied(), Failure, find_program(), guard() (+22 more)
+Cohesion: 0.19
+Nodes (28): Error, From, clear_readonly(), denied(), Failure, find_program(), guard(), is_dir_link() (+20 more)
 
 ### Community 7 - "Fixture Test Suite"
-Cohesion: 0.08
-Nodes (39): atomicbool, fs, a_schedule_never_takes_check_first_folders_or_fresh_ones(), access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again() (+31 more)
+Cohesion: 0.09
+Nodes (36): atomicbool, a_kept_docker_row_is_refused_without_running_docker(), access_denied_is_reported_as_needing_admin(), age_follows_the_project_not_only_the_build_folder(), clean_command_only_deletes_scanned_and_still_valid_folders(), command_line_options_and_picking(), delete_leaves_nothing_behind_and_a_leftover_is_offered_again(), deletes_without_following_junctions_and_clears_read_only() (+28 more)
 
 ### Community 8 - "Tauri App Config"
 Cohesion: 0.07
 Nodes (29): https://github.com/tajbinkhan/devsweep/releases/latest/download/latest.json, icons/128x128@2x.png, icons/128x128.png, icons/32x32.png, icons/icon.icns, icons/icon.ico, nsis, app (+21 more)
 
 ### Community 9 - "procs.rs"
-Cohesion: 0.26
-Nodes (20): HashSet, S, norm(), Proc, protected(), Option, Path, String (+12 more)
+Cohesion: 0.20
+Nodes (24): HashSet, Pid, S, norm(), Proc, protected(), Option, Path (+16 more)
 
 ### Community 10 - "App Screenshot UI"
 Cohesion: 0.22
@@ -145,7 +144,7 @@ Nodes (14): DevSweep App Screenshot, Detected Artifact Types (Rust target, Pytho
 
 ### Community 11 - "schedule.rs"
 Cohesion: 0.16
-Nodes (33): duration, apply(), Every, Failed, get_schedule(), launchd_plist(), options(), plist_path() (+25 more)
+Nodes (33): apply(), Every, Failed, get_schedule(), launchd_plist(), options(), plist_path(), program() (+25 more)
 
 ### Community 12 - "npm Package Manifest"
 Cohesion: 0.17
@@ -193,7 +192,7 @@ Nodes (5): Global package caches cleaning, pnpm store prune, Project folders / G
 
 ### Community 26 - "docker.rs"
 Cohesion: 0.20
-Nodes (23): action(), docker(), Engine, item(), Kind, kind_of(), parse_df(), parse_info() (+15 more)
+Nodes (23): duration, action(), docker(), Engine, item(), Kind, kind_of(), parse_df() (+15 more)
 
 ### Community 27 - "rules.rs"
 Cohesion: 0.21
@@ -212,8 +211,8 @@ Cohesion: 0.29
 Nodes (5): [dist, version, tag, repo, out], files, linux, manifest, windows
 
 ### Community 48 - "Scan, Review, Delete workflow"
-Cohesion: 0.33
-Nodes (9): io, message(), new(), output(), Command, Duration, Result, String (+1 more)
+Cohesion: 0.12
+Nodes (30): Child, FnMut, HANDLE, io, Send, a_program_is_on_the_exit_list_only_while_it_runs(), a_timeout_stops_the_program_under_the_wrapper_too(), adopt() (+22 more)
 
 ### Community 49 - "Step 02 Review (unused 30 days, locked in use, Check first)"
 Cohesion: 0.33
@@ -230,22 +229,22 @@ Nodes (18): arc, age_days(), attach_console(), days(), execute(), fmt_age(), fmt
 ## Knowledge Gaps
 - **84 isolated node(s):** `[input, output]`, `placeholder`, `nsis`, `exe`, `at` (+79 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `main.rs (Tauri commands)` connect `DevSweep` to `Tauri Commands and Elevation`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **Why does `DevSweep main window (ui/index.html)` connect `DevSweep` to `Frontend UI Logic`?**
-  _High betweenness centrality (0.134) - this node is a cross-community bridge._
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **What connects `[input, output]`, `placeholder`, `nsis` to the rest of the system?**
   _84 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Rules and Parallel Scanner` be split into smaller, more focused modules?**
+  _Cohesion score 0.14112903225806453 - nodes in this community are weakly interconnected._
 - **Should `Tauri Commands and Elevation` be split into smaller, more focused modules?**
-  _Cohesion score 0.11694915254237288 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11422527763088314 - nodes in this community are weakly interconnected._
 - **Should `Frontend UI Logic` be split into smaller, more focused modules?**
   _Cohesion score 0.11764705882352941 - nodes in this community are weakly interconnected._
 - **Should `Fixture Test Suite` be split into smaller, more focused modules?**
-  _Cohesion score 0.08392156862745098 - nodes in this community are weakly interconnected._
-- **Should `Tauri App Config` be split into smaller, more focused modules?**
-  _Cohesion score 0.06666666666666667 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09183673469387756 - nodes in this community are weakly interconnected._

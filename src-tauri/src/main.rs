@@ -787,6 +787,12 @@ fn main() {
             schedule::get_schedule,
             schedule::set_schedule
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running DevSweep");
+        .build(tauri::generate_context!())
+        .expect("error while running DevSweep")
+        .run(|_, event| {
+            // A delete can be half way through pnpm or Docker when the window closes.
+            if let tauri::RunEvent::Exit = event {
+                command::end_all();
+            }
+        });
 }
